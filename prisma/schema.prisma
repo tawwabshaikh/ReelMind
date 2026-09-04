@@ -1,0 +1,28 @@
+// Prisma schema for Reel → Notes (bilingual + infographic)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  // Source video metadata
+  videoName String
+  // Selected language mode: "english" | "urdu" | "both"
+  language  String
+  // Raw transcript from ASR
+  transcript String
+  // Structured notes (JSON string of {title, summary, keyPoints[], tags[], markdown})
+  notesEn   String?
+  notesUr   String?
+  // Generated infographic PNG filenames (served from /generated/)
+  infographicEn String?
+  infographicUr String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
