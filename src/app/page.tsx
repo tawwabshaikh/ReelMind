@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   Film,
@@ -21,12 +21,16 @@ import {
   Zap,
   ShieldCheck,
   Download,
+  Share2,
+  Keyboard,
+  Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { UploadZone } from '@/components/reel-notes/upload-zone'
 import { LanguageSelector } from '@/components/reel-notes/language-selector'
 import { NotesView } from '@/components/reel-notes/notes-view'
@@ -34,6 +38,8 @@ import { TranscriptView } from '@/components/reel-notes/transcript-view'
 import { InfographicView } from '@/components/reel-notes/infographic-view'
 import { HistoryPanel } from '@/components/reel-notes/history-panel'
 import { NoteEditor } from '@/components/reel-notes/note-editor'
+import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
+import { ShareButton } from '@/components/reel-notes/share-button'
 import type {
   Language,
   Theme,
@@ -75,8 +81,85 @@ export default function Home() {
   const [regeneratingNotes, setRegeneratingNotes] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const [videoName, setVideoName] = useState<string>('')
+  const [sharedMode, setSharedMode] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   const busy = stage === 'transcribing' || stage === 'generating-notes' || regeneratingNotes
+
+  // ---- Share-link detection: ?share=<id> loads a read-only note ----
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const shareId = params.get('share')
+    if (!shareId) return
+    setSharedMode(true)
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/notes/${shareId}`)
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.error || 'Shared note not found')
+        const d = data as NoteDetailResponse
+        const n = d.note
+        const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
+        setTranscript({
+          transcript: n.transcript,
+          meta: {
+            filename: n.videoName,
+            sizeBytes: n.sizeBytes ?? 0,
+            durationSec: n.durationSec,
+            wordCount,
+          },
+        })
+        setNotes({
+          noteId: n.id,
+          language: n.language,
+          english: n.english,
+          urdu: n.urdu,
+        })
+        setInfographicEn(n.infographicEn)
+        setInfographicUr(n.infographicUr)
+        setLoadedNoteId(n.id)
+        setVideoName(n.videoName)
+        setStage('done')
+        setActiveTab('notes')
+        toast.success(`Viewing shared note: ${n.videoName}`)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Failed to load shared note')
+      }
+    })()
+  }, [])
+
+  // ---- Keyboard shortcuts ----
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't intercept when typing in inputs/textareas or when a modal is open.
+      const target = e.target as HTMLElement
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key === 'g' && notes && !infographicLoading) {
+        e.preventDefault()
+        generateInfographic()
+      } else if (mod && e.key === 'e' && notes && !sharedMode) {
+        e.preventDefault()
+        setEditorOpen(true)
+      } else if (mod && e.key === '1' && (transcript || notes)) {
+        e.preventDefault()
+        setActiveTab('notes')
+      } else if (mod && e.key === '2' && transcript) {
+        e.preventDefault()
+        setActiveTab('transcript')
+      } else if (mod && e.key === '3' && notes) {
+        e.preventDefault()
+        setActiveTab('infographic')
+      } else if (mod && e.key === 'k') {
+        e.preventDefault()
+        setShortcutsOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [notes, transcript, infographicLoading, sharedMode])
 
   const reset = useCallback(() => {
     setTranscript(null)
@@ -318,15 +401,34 @@ export default function Home() {
             </h1>
             <p className="text-[11px] text-muted-foreground">Bilingual video notes + infographic generator</p>
           </div>
-          <div className="ml-auto hidden items-center gap-2 sm:flex">
-            <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-700">
-              <Sparkles className="h-3 w-3" /> v2
+          <div className="ml-auto flex items-center gap-1.5">
+            {sharedMode && (
+              <Badge variant="outline" className="mr-1 gap-1 border-amber-500/40 text-amber-700">
+                <Eye className="h-3 w-3" /> Shared view
+              </Badge>
+            )}
+            {notes && !sharedMode && (
+              <ShareButton noteId={notes.noteId ?? loadedNoteId} videoName={videoName} variant="labeled" />
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setShortcutsOpen(true)}
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts (⌘K)"
+            >
+              <Keyboard className="h-4 w-4" />
+            </Button>
+            <ThemeToggle />
+            <Badge variant="outline" className="hidden gap-1 border-emerald-500/30 text-emerald-700 sm:flex">
+              <Sparkles className="h-3 w-3" /> v3
             </Badge>
             <a
               href="https://github.com"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
               aria-label="Source"
             >
               <Github className="h-4 w-4" />
@@ -335,10 +437,11 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ---------------- Hero ---------------- */}
+      {/* ---------------- Hero (hidden in shared view) ---------------- */}
+      {!sharedMode && (
       <section className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6">
         <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30">
             <Sparkles className="h-3 w-3" /> Whisper transcription · Claude-style summarization
           </span>
           <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
@@ -355,14 +458,40 @@ export default function Home() {
           <FeatureChip icon={<Languages className="h-4 w-4" />} title="Bilingual" sub="EN · UR · Both" />
           <FeatureChip icon={<Wand2 className="h-4 w-4" />} title="3 themes" sub="Emerald · Midnight · Sunrise" />
           <FeatureChip icon={<ImageIcon className="h-4 w-4" />} title="PNG 1080×1350" sub="Instagram-ready" />
-          <FeatureChip icon={<ShieldCheck className="h-4 w-4" />} title="History" sub="Reload any past run" />
+          <FeatureChip icon={<ShieldCheck className="h-4 w-4" />} title="History + Share" sub="Reload · Public links" />
         </div>
       </section>
+      )}
+
+      {/* Shared-view banner */}
+      {sharedMode && (
+        <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-50/60 px-4 py-3 dark:bg-amber-950/20">
+            <div className="flex items-center gap-2 text-sm">
+              <Eye className="h-4 w-4 text-amber-600" />
+              <span className="font-semibold">You're viewing a shared note</span>
+              <span className="text-muted-foreground">— read-only. Download buttons still work.</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                window.location.href = window.location.origin
+              }}
+            >
+              <Film className="h-3.5 w-3.5" />
+              Back to app
+            </Button>
+          </div>
+        </section>
+      )}
 
       {/* ---------------- Main ---------------- */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <div className="grid gap-6 lg:grid-cols-5">
-          {/* Left: config */}
+          {/* Left: config (hidden in shared view) */}
+          {!sharedMode && (
           <div className="space-y-5 lg:col-span-2">
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
@@ -460,9 +589,10 @@ export default function Home() {
               </Alert>
             )}
           </div>
+          )}
 
-          {/* Right: results */}
-          <div className="lg:col-span-3">
+          {/* Right: results (full-width in shared view) */}
+          <div className={sharedMode ? 'lg:col-span-5' : 'lg:col-span-3'}>
             <Card className="shadow-sm">
               <CardHeader className="pb-3">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -497,7 +627,9 @@ export default function Home() {
                           infographicEn={infographicEn}
                           infographicUr={infographicUr}
                           videoName={videoName}
+                          noteId={notes.noteId ?? loadedNoteId}
                           onEdit={() => setEditorOpen(true)}
+                          readOnly={sharedMode}
                         />
                       </div>
                     ) : (
@@ -550,10 +682,12 @@ export default function Home() {
           </div>
         </div>
 
-        {/* History */}
-        <div className="mt-6">
-          <HistoryPanel onLoad={loadHistoryNote} activeId={loadedNoteId} refreshKey={historyRefreshKey} />
-        </div>
+        {/* History (hidden in shared view) */}
+        {!sharedMode && (
+          <div className="mt-6">
+            <HistoryPanel onLoad={loadHistoryNote} activeId={loadedNoteId} refreshKey={historyRefreshKey} />
+          </div>
+        )}
       </main>
 
       {/* ---------------- Footer ---------------- */}
@@ -579,6 +713,46 @@ export default function Home() {
         videoName={videoName}
         onSaved={handleNotesSaved}
       />
+
+      {/* Keyboard shortcuts dialog */}
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Keyboard className="h-4 w-4 text-emerald-600" />
+              Keyboard shortcuts
+            </DialogTitle>
+            <DialogDescription>Press these anywhere outside of text fields.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2.5">
+            {[
+              { keys: ['⌘', 'G'], action: 'Generate / regenerate infographic' },
+              { keys: ['⌘', 'E'], action: 'Edit notes' },
+              { keys: ['⌘', '1'], action: 'Switch to Notes tab' },
+              { keys: ['⌘', '2'], action: 'Switch to Transcript tab' },
+              { keys: ['⌘', '3'], action: 'Switch to Infographic tab' },
+              { keys: ['⌘', 'K'], action: 'Toggle this shortcuts dialog' },
+            ].map((s) => (
+              <div key={s.action} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                <span className="text-sm">{s.action}</span>
+                <span className="flex shrink-0 gap-1">
+                  {s.keys.map((k) => (
+                    <kbd
+                      key={k}
+                      className="inline-flex h-6 min-w-6 items-center justify-center rounded border border-border bg-background px-1.5 font-mono text-xs font-semibold shadow-sm"
+                    >
+                      {k}
+                    </kbd>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShortcutsOpen(false)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

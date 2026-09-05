@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Download, FileText, Tag, Hash, CheckCircle2, Copy, Check, Pencil, FileDown, Loader2 } from 'lucide-react'
+import { Download, FileText, Tag, Hash, CheckCircle2, Copy, Check, Pencil, FileDown, Loader2, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { ShareButton } from '@/components/reel-notes/share-button'
 import type { NoteVersion, InfographicFile } from '@/lib/types'
 import { slugify } from '@/lib/slugify-client'
 
@@ -15,7 +16,10 @@ interface Props {
   infographicEn?: InfographicFile | null
   infographicUr?: InfographicFile | null
   videoName?: string
+  noteId?: string | null
   onEdit?: () => void
+  /** When true, the share + edit buttons are hidden (read-only shared view). */
+  readOnly?: boolean
 }
 
 function downloadText(filename: string, text: string, mime = 'text/markdown') {
@@ -69,13 +73,17 @@ function NoteCard({
   lang,
   infographic,
   videoName,
+  noteId,
   onEdit,
+  readOnly,
 }: {
   version: NoteVersion
   lang: 'english' | 'urdu'
   infographic?: InfographicFile | null
   videoName?: string
+  noteId?: string | null
   onEdit?: () => void
+  readOnly?: boolean
 }) {
   const isUrdu = lang === 'urdu'
   const { structured, markdown } = version
@@ -124,7 +132,7 @@ function NoteCard({
           </h3>
         </div>
         <div className="relative flex shrink-0 gap-1.5">
-          {onEdit && (
+          {onEdit && !readOnly && (
             <Button
               size="sm"
               variant="secondary"
@@ -134,6 +142,9 @@ function NoteCard({
             >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
+          )}
+          {!readOnly && (
+            <ShareButton noteId={noteId ?? null} videoName={videoName || 'untitled'} variant="icon" />
           )}
           <Button
             size="sm"
@@ -211,7 +222,7 @@ function NoteCard({
   )
 }
 
-export function NotesView({ english, urdu, infographicEn, infographicUr, videoName, onEdit }: Props) {
+export function NotesView({ english, urdu, infographicEn, infographicUr, videoName, noteId, onEdit, readOnly }: Props) {
   if (!english && !urdu) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-16 text-center">
@@ -228,7 +239,9 @@ export function NotesView({ english, urdu, infographicEn, infographicUr, videoNa
           lang="english"
           infographic={infographicEn}
           videoName={videoName}
+          noteId={noteId}
           onEdit={onEdit}
+          readOnly={readOnly}
         />
       )}
       {urdu && (
@@ -237,7 +250,9 @@ export function NotesView({ english, urdu, infographicEn, infographicUr, videoNa
           lang="urdu"
           infographic={infographicUr}
           videoName={videoName}
+          noteId={noteId}
           onEdit={onEdit}
+          readOnly={readOnly}
         />
       )}
     </div>
