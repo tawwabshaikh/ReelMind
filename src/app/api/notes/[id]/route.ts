@@ -66,12 +66,14 @@ interface PatchBody {
     summary?: string
     keyPoints?: KeyPoint[]
     tags?: string[]
+    tagColors?: Record<string, string>
   }
   urdu?: {
     title?: string
     summary?: string
     keyPoints?: KeyPoint[]
     tags?: string[]
+    tagColors?: Record<string, string>
   }
 }
 
@@ -126,6 +128,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           .filter((t) => typeof t === 'string' && t.trim())
           .map((t) => String(t).trim())
           .slice(0, 8)
+      }
+      if (patch.tagColors && typeof patch.tagColors === 'object') {
+        // Persist the tagColors map; prune entries for tags no longer present.
+        const validTags = new Set(existing.tags)
+        const cleaned: Record<string, string> = {}
+        for (const [tag, color] of Object.entries(patch.tagColors)) {
+          if (validTags.has(tag) && typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) {
+            cleaned[tag] = color
+          }
+        }
+        existing.tagColors = Object.keys(cleaned).length > 0 ? cleaned : undefined
       }
       return JSON.stringify(existing)
     }

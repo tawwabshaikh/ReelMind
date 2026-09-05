@@ -373,3 +373,54 @@ Task: Assess project status, run QA, then advance with mandatory styling + new f
 - **Export-all for large histories**: the combined PDF renders a notes-sheet PNG per language per note via Playwright (one Chromium launch each), which is slow for many notes (O(n) browser launches). A future optimization could batch-render all sheets in a single Chromium session, or cap the export to the N most recent notes. Low priority for the current scale.
 - **Custom tag colors** (planned this round) were not implemented — deferred to next round. Would require a `tagColors` map in the notes JSON + a color picker in the NoteEditor + themed rendering in the notes view + infographic + notes sheet.
 - **Next-phase feature ideas**: (1) custom tag colors; (2) multi-note comparison view (side-by-side); (3) soft-delete + trash restoration; (4) OAuth for persistent per-user history; (5) drag-to-reorder key points in the NoteEditor; (6) batch-render optimization for export-all; (7) per-note infographic download from the combined PDF view.
+
+---
+Task ID: 12 (cron round 6)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA, then advance with mandatory styling + new features.
+
+## Current project status (assessment)
+- Core features stable from rounds 1-5: bilingual EN/UR notes, 3 infographic themes, history reload + search + tag filtering, copy/stats, regenerate-notes, inline note editing, combined PDF export, Urdu PDF page-1 (notes sheet), export-all, DB metrics, backfill, shareable public links, dark mode, keyboard shortcuts, delete notes (single + bulk), selection mode, copy-share-link + delete quick actions.
+- QA at start: dev server down (sandbox reaping); restarted. Lint clean (0/0), GET / + GET /api/notes → 200, 1 note in history. agent-browser smoke test rendered correctly.
+- No bugs to fix → proceeded to the worklog's next-phase recommendations (custom tag colors — deferred from round 5).
+
+## Current goals / completed modifications / verification
+
+### FEATURE P — Custom tag colors (deferred from round 5, now complete)
+- **Shared types** (`src/lib/types.ts`): added optional `tagColors?: Record<string, string>` to `StructuredNote` (backward-compatible — old notes without it work fine).
+- **Tag color helpers** (`src/lib/tag-colors.ts`): new module with:
+  - `PALETTE` — 10 curated hex colors (emerald, amber, pink, violet, cyan, red, teal, orange, indigo, lime).
+  - `paletteColorForTag(tag)` — deterministic hash → palette index (stable across reloads).
+  - `colorForTag(tag, tagColors?)` — user-set custom color wins, else palette color.
+  - `shade(hex, factor)` — lighten/darken for bg/text/border variants.
+  - `hexToRgbTriplet(hex)` — for rgba().
+- **PATCH route** (`src/app/api/notes/[id]/route.ts`): accepts `tagColors` per language; validates hex format (`/^#[0-9a-fA-F]{6}$/`), prunes entries for tags no longer present, stores `undefined` if empty (keeps JSON clean).
+- **NotesView** (`src/components/reel-notes/notes-view.tsx`): tag badges now render with inline `backgroundColor`/`color`/`borderColor` derived from `colorForTag()` + `shade()` — light bg (85% lighten), dark text (30% darken), medium border. Falls back to palette colors when no custom color set.
+- **NoteEditor** (`src/components/reel-notes/note-editor.tsx`): each tag pill now has a color dot button that opens a Popover color picker with:
+  - 10 preset swatches (click to apply).
+  - A native `<input type="color">` for custom hex.
+  - A "Reset" button to clear the custom color (back to palette default).
+  - The tag pill's bg/text/border update live when a color is chosen.
+  - `tagColors` is included in the PATCH payload on save.
+- **Verification**:
+  - curl PATCH with `tagColors: {deep work:#8b5cf6, focus:#ef4444, productivity:#06b6d4}` → 200; GET returns the same `tagColors`. ✓
+  - agent-browser: loaded the note → tag badges render with inline `backgroundColor` styles: "deep work"→`rgb(238,231,254)` (violet), "focus"→`rgb(253,227,227)` (red), "productivity"→`rgb(218,244,249)` (cyan). Both EN + UR tags colored. ✓
+  - agent-browser: opened Edit modal → found 5 color-picker buttons (one per tag), "Color for deep work" had `bg=rgb(139,92,246)` = `#8b5cf6` (the custom color). ✓
+  - `bun run lint` → 0/0. ✓
+
+### Styling polish (mandatory)
+- Tag badges: replaced the hardcoded `bg-amber-100/70 text-amber-800` with dynamic per-tag colors (light bg + dark text + medium border, all derived from the tag's color via `shade()`).
+- Color picker popover: 5×2 grid of preset swatches with selected-state ring, native color input, reset button.
+- Color dot on each tag pill in the editor: small circle showing the current color, with a Palette icon on hover.
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings. ✓
+- All API endpoints verified 200: PATCH with tagColors, GET returns tagColors, plus all prior routes. ✓
+- agent-browser E2E: colored tags render in the notes view (EN + UR), color picker buttons present in the editor with correct initial colors. ✓
+- dev.log: no errors/exceptions. ✓
+
+## Unresolved issues / risks + next-phase recommendations
+- **Sandbox dev-server reaping** persists: dev server dies between separate Bash commands. Mitigated by combining verifications in single commands. Not a code bug.
+- **Multi-note comparison view** (planned this round) was not implemented — it's a larger feature requiring a new UI surface (side-by-side diff of 2 selected notes' titles/summaries/key-points/tags). Deferred to next round.
+- **Tag colors in infographic + notes sheet**: the infographic and PDF notes-sheet currently use the theme's hardcoded amber tag colors. A future enhancement could thread `tagColors` into `buildInfographicHtml()` and `buildNotesSheetHtml()` so the custom colors appear in those exports too.
+- **Next-phase feature ideas**: (1) multi-note comparison view (side-by-side); (2) thread tagColors into infographic + notes sheet HTML; (3) soft-delete + trash restoration; (4) OAuth for persistent per-user history; (5) drag-to-reorder key points in the NoteEditor; (6) batch-render optimization for export-all; (7) tag-color import/export presets.

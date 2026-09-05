@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Pencil, X, Plus, Trash2, Loader2, Save, Tag, Hash } from 'lucide-react'
+import { Pencil, X, Plus, Trash2, Loader2, Save, Tag, Hash, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { NoteVersion, StructuredNote, KeyPoint, NoteDetail } from '@/lib/types'
+import { colorForTag, shade } from '@/lib/tag-colors'
+
+const TAG_COLOR_PRESETS = [
+  '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4',
+  '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
+]
 
 interface Props {
   open: boolean
@@ -35,15 +42,17 @@ interface EditableNote {
   summary: string
   keyPoints: KeyPoint[]
   tags: string[]
+  tagColors: Record<string, string>
 }
 
 function toEditable(v: NoteVersion | undefined): EditableNote {
-  if (!v) return { title: '', summary: '', keyPoints: [], tags: [] }
+  if (!v) return { title: '', summary: '', keyPoints: [], tags: [], tagColors: {} }
   return {
     title: v.structured.title,
     summary: v.structured.summary,
     keyPoints: v.structured.keyPoints.map((kp) => ({ ...kp })),
     tags: [...v.structured.tags],
+    tagColors: { ...(v.structured.tagColors || {}) },
   }
 }
 
@@ -85,7 +94,17 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
     setTagInput('')
   }
   const removeTag = (t: string) => {
-    setCurrent({ ...current, tags: current.tags.filter((x) => x !== t) })
+    const nextColors = { ...current.tagColors }
+    delete nextColors[t]
+    setCurrent({ ...current, tags: current.tags.filter((x) => x !== t), tagColors: nextColors })
+  }
+  const setTagColor = (t: string, color: string) => {
+    setCurrent({ ...current, tagColors: { ...current.tagColors, [t]: color } })
+  }
+  const clearTagColor = (t: string) => {
+    const nextColors = { ...current.tagColors }
+    delete nextColors[t]
+    setCurrent({ ...current, tagColors: nextColors })
   }
   const addPoint = () => {
     setCurrent({ ...current, keyPoints: [...current.keyPoints, { heading: '', detail: '' }] })
@@ -112,6 +131,7 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
           summary: en.summary,
           keyPoints: en.keyPoints.filter((kp) => kp.detail.trim()),
           tags: en.tags,
+          tagColors: en.tagColors,
         }
       }
       if (hasUr) {
@@ -120,6 +140,7 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
           summary: ur.summary,
           keyPoints: ur.keyPoints.filter((kp) => kp.detail.trim()),
           tags: ur.tags,
+          tagColors: ur.tagColors,
         }
       }
       const res = await fetch(`/api/notes/${noteId}`, {
@@ -269,20 +290,91 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
             </div>
             {current.tags.length > 0 && (
               <div className={`flex flex-wrap gap-1.5 ${isUrdu ? 'justify-end' : ''}`}>
-                {current.tags.map((t) => (
-                  <Badge key={t} variant="secondary" className="gap-1 bg-amber-100/70 text-amber-800">
-                    <Hash className="h-3 w-3" />
-                    {t}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(t)}
-                      className="ml-0.5 rounded-full hover:bg-amber-200/70"
-                      aria-label={`Remove ${t}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
+                {current.tags.map((t) => {
+                  const customColor = current.tagColors[t]
+                  const dotColor = customColor || colorForTag(t)
+                  return (
+                    <div key={t} className="group/tag inline-flex items-center">
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 border pr-1"
+                        style={{
+                          backgroundColor: customColor ? shade(customColor, 0.85) : undefined,
+                          color: customColor ? shade(customColor, -0.3) : undefined,
+                          borderColor: customColor ? shade(customColor, 0.6) : undefined,
+                        }}
+                      >
+                        <Hash className="h-3 w-3" />
+                        {t}
+                        {/* Color picker */}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10"
+                              style={{ backgroundColor: dotColor }}
+                              aria-label={`Color for ${t}`}
+                              title={`Color for ${t}`}
+                            >
+                              <Palette className="h-2.5 w-2.5 text-white/0 opacity-0 transition-opacity group-hover/tag:opacity-100" style={{ color: 'rgba(255,255,255,0.9)' }} />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-3" align="center">
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Color for “{t}”
+                              </p>
+                              <div className="grid grid-cols-5 gap-1.5">
+                                {TAG_COLOR_PRESETS.map((c) => (
+                                  <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => setTagColor(t, c)}
+                                    className="h-6 w-6 rounded-full border-2 transition-transform hover:scale-110"
+                                    style={{
+                                      backgroundColor: c,
+                                      borderColor: customColor === c ? '#0f172a' : 'transparent',
+                                    }}
+                                    aria-label={`Set ${c}`}
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-1.5 pt-1">
+                                <input
+                                  type="color"
+                                  value={customColor || dotColor}
+                                  onChange={(e) => setTagColor(t, e.target.value)}
+                                  className="h-7 w-9 cursor-pointer rounded border border-border bg-background"
+                                  aria-label="Custom color"
+                                />
+                                <span className="text-[10px] text-muted-foreground">Custom</span>
+                                {customColor && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="ml-auto h-6 px-2 text-[10px]"
+                                    onClick={() => clearTagColor(t)}
+                                  >
+                                    Reset
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        <button
+                          type="button"
+                          onClick={() => removeTag(t)}
+                          className="ml-0.5 rounded-full p-0.5 hover:bg-black/10"
+                          aria-label={`Remove ${t}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>

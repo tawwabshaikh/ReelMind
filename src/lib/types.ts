@@ -14,6 +14,8 @@ export interface StructuredNote {
   keyPoints: KeyPoint[]
   tags: string[]
   language: 'english' | 'urdu'
+  /** Optional map of tag → hex color (e.g. { "deep work": "#10b981" }). */
+  tagColors?: Record<string, string>
 }
 
 export interface NoteVersion {

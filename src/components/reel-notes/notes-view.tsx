@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { ShareButton } from '@/components/reel-notes/share-button'
 import type { NoteVersion, InfographicFile } from '@/lib/types'
 import { slugify } from '@/lib/slugify-client'
+import { colorForTag, shade } from '@/lib/tag-colors'
 
 interface Props {
   english?: NoteVersion
@@ -208,12 +209,20 @@ function NoteCard({
             <Separator />
             <div className={`flex flex-wrap items-center gap-2 ${isUrdu ? 'justify-end' : ''}`}>
               <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-              {structured.tags.map((t, i) => (
-                <Badge key={i} variant="secondary" className="bg-amber-100/70 text-amber-800 hover:bg-amber-100">
-                  <Hash className="mr-0.5 h-3 w-3" />
-                  {t}
-                </Badge>
-              ))}
+              {structured.tags.map((t, i) => {
+                const color = colorForTag(t, structured.tagColors)
+                return (
+                  <Badge
+                    key={i}
+                    variant="secondary"
+                    className="gap-1 border"
+                    style={{ backgroundColor: shade(color, 0.85), color: shade(color, -0.3), borderColor: shade(color, 0.6) }}
+                  >
+                    <Hash className="h-3 w-3" />
+                    {t}
+                  </Badge>
+                )
+              })}
             </div>
           </>
         )}
