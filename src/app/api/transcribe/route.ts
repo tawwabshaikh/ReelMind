@@ -47,23 +47,33 @@ export async function POST(req: NextRequest) {
 
       const zai = await ZAI.create()
       const parts: string[] = []
+      let chunkErrors = 0
 
       // 3) Transcribe each segment sequentially and concatenate.
-      //    (Sequential to avoid rate limits; each chunk is fast.)
+      //    Per-chunk try/catch: if one chunk fails (e.g. ASR hiccup), skip it
+      //    and continue with the rest rather than failing the whole request.
       for (let i = 0; i < segments.length; i++) {
         const segPath = segments[i]
-        const base64 = await fileToBase64(segPath)
-        const resp = await zai.audio.asr.create({ file_base64: base64 })
-        const text = (resp.text || '').trim()
-        if (text) {
-          parts.push(text)
+        try {
+          const base64 = await fileToBase64(segPath)
+          const resp = await zai.audio.asr.create({ file_base64: base64 })
+          const text = (resp.text || '').trim()
+          if (text) {
+            parts.push(text)
+          }
+        } catch (chunkErr) {
+          chunkErrors++
+          console.error(`[/api/transcribe] chunk ${i + 1}/${segments.length} failed:`, chunkErr instanceof Error ? chunkErr.message : chunkErr)
         }
       }
 
       const transcript = parts.join(' ').replace(/\s+/g, ' ').trim()
 
       if (!transcript) {
-        return NextResponse.json({ error: 'Transcription returned empty text. The video may have no audible speech.' }, { status: 422 })
+        const msg = chunkErrors > 0
+          ? `Transcription failed for all ${segments.length} segment(s). The ASR API may be temporarily unavailable or the audio format may be unsupported.`
+          : 'Transcription returned empty text. The video may have no audible speech.'
+        return NextResponse.json({ error: msg }, { status: 422 })
       }
 
       return NextResponse.json({
@@ -74,6 +84,7 @@ export async function POST(req: NextRequest) {
           durationSec: duration,
           wordCount: transcript.split(/\s+/).filter(Boolean).length,
           segments: segments.length,
+          segmentErrors: chunkErrors > 0 ? chunkErrors : undefined,
         },
       })
     } finally {

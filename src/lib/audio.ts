@@ -72,15 +72,19 @@ export async function chunkAudio(audioPath: string, durationSec: number | null):
   const pattern = path.join(segDir, 'chunk-%03d.wav')
 
   await new Promise<void>((resolve, reject) => {
-    // -f segment  segment muxer
-    // -segment_time 28  split every 28s (under the 30s ASR limit)
-    // -c copy  no re-encode (WAV PCM splits cleanly at sample boundaries)
+    // -f segment           segment muxer
+    // -segment_time 28     split every 28s (under the 30s ASR limit)
+    // -segment_format wav   each segment is a self-contained WAV file
+    // -ac 1 -ar 16000       re-encode to mono 16kHz PCM (ensures valid WAV
+    //                       headers per segment — -c copy produces broken headers)
     const ffmpeg = spawn('ffmpeg', [
       '-y',
       '-i', audioPath,
       '-f', 'segment',
       '-segment_time', String(ASR_MAX_SEGMENT_SEC),
-      '-c', 'copy',
+      '-segment_format', 'wav',
+      '-ac', '1',
+      '-ar', '16000',
       pattern,
     ])
 
@@ -99,14 +103,24 @@ export async function chunkAudio(audioPath: string, durationSec: number | null):
   })
 
   // List + sort the generated chunks (chunk-000.wav, chunk-001.wav, …)
+  // and filter out any segments shorter than 0.5s (ASR may reject tiny clips).
   const files = await fs.readdir(segDir)
-  const segments = files
+  const allSegments = files
     .filter((f) => f.startsWith('chunk-') && f.endsWith('.wav'))
     .sort()
     .map((f) => path.join(segDir, f))
 
+  // Filter out very short segments (< 0.5s) — they cause ASR 400 errors.
+  const segments: string[] = []
+  for (const seg of allSegments) {
+    const dur = await probeDuration(seg)
+    if (dur == null || dur >= 0.5) {
+      segments.push(seg)
+    }
+  }
+
   if (segments.length === 0) {
-    // Fallback: if chunking produced nothing, use the original.
+    // Fallback: if all segments were too short, use the original.
     return { dir, segments: [audioPath] }
   }
 

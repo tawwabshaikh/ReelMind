@@ -649,3 +649,23 @@ The z-ai ASR API rejects audio files longer than 30 seconds with HTTP 400: `{"er
 ## Impact
 - Videos of any duration (up to the 120MB upload cap) can now be transcribed. A 5-minute video → ~11 segments → 11 ASR calls. The `maxDuration: 300` route timeout accommodates this.
 - The `segments` count in the response meta lets the UI show how many chunks were processed (currently not displayed in the UI, but available for future use).
+
+---
+Task ID: 18 (bugfix — chunking ffmpeg flags conflict)
+Agent: main (Z.ai Code)
+Task: Fix the "Transcription failed (400)" error caused by the chunking ffmpeg command producing a single file instead of multiple segments.
+
+## Problem
+The initial chunking fix (task 17) used `-f segment ... -f wav` — the two `-f` flags conflicted, with `-f wav` overriding `-f segment`. Result: ffmpeg output a single WAV file (not multiple segments), which still exceeded the 30s ASR limit → 400 error. Additionally, `-c copy` produced WAV chunks with invalid headers that the ASR API rejected.
+
+## Fix
+- **`src/lib/audio.ts` `chunkAudio()`**: 
+  - Replaced `-c copy` with `-ac 1 -ar 16000` (re-encode to mono 16kHz PCM per segment — ensures valid, self-contained WAV headers).
+  - Replaced the conflicting `-f wav` with `-segment_format wav` (the correct way to set the per-segment container format for the segment muxer).
+  - Added a post-chunking filter: probes each segment's duration and discards any < 0.5s (ASR rejects tiny clips with 400).
+- **`src/app/api/transcribe/route.ts`**: added per-chunk try/catch — if one chunk's ASR call fails, it's logged and skipped; the remaining chunks still produce a transcript. Only if ALL chunks fail does the route return a 422 with a meaningful message. Response meta now includes `segmentErrors` count when > 0.
+
+## Verification
+- 30s video → 200, 65 words, **2 segments** (28s + 2s), 0 errors. ✓
+- 62s video → 200, 150 words, **3 segments** (28s + 28s + 6s), 0 errors. ✓
+- `bun run lint` → 0/0. ✓
