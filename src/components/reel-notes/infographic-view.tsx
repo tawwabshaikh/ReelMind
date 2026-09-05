@@ -3,7 +3,8 @@
 import { Download, ImageIcon, Sparkles, Loader2, Languages } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import type { InfographicFile } from '@/lib/types'
+import { ThemeSelector } from '@/components/reel-notes/theme-selector'
+import type { InfographicFile, Theme } from '@/lib/types'
 
 interface Props {
   english: InfographicFile | null
@@ -11,12 +12,14 @@ interface Props {
   loading: boolean
   canGenerate: boolean
   onGenerate: () => void
+  theme: Theme
+  onThemeChange: (t: Theme) => void
 }
 
 function InfographicCard({ file, lang }: { file: InfographicFile; lang: 'english' | 'urdu' }) {
   const isUrdu = lang === 'urdu'
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+    <div className="group overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:shadow-md">
       <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="border-emerald-500/30 bg-emerald-50 text-emerald-700">
@@ -33,17 +36,19 @@ function InfographicCard({ file, lang }: { file: InfographicFile; lang: 'english
         </Button>
       </div>
       <div className="bg-muted/20 p-3">
-        <img
-          src={file.url}
-          alt={`Infographic (${lang})`}
-          className="mx-auto w-full max-w-[420px] rounded-lg shadow-md ring-1 ring-border"
-        />
+        <div className="overflow-hidden rounded-lg ring-1 ring-border">
+          <img
+            src={file.url}
+            alt={`Infographic (${lang})`}
+            className="mx-auto w-full max-w-[420px] shadow-md transition-transform duration-300 group-hover:scale-[1.02]"
+          />
+        </div>
       </div>
     </div>
   )
 }
 
-export function InfographicView({ english, urdu, loading, canGenerate, onGenerate }: Props) {
+export function InfographicView({ english, urdu, loading, canGenerate, onGenerate, theme, onThemeChange }: Props) {
   const hasAny = english || urdu
 
   return (
@@ -76,6 +81,10 @@ export function InfographicView({ english, urdu, loading, canGenerate, onGenerat
             </>
           )}
         </Button>
+      </div>
+
+      <div className="rounded-xl border border-dashed border-amber-300/50 bg-amber-50/40 p-3.5 dark:bg-amber-950/10">
+        <ThemeSelector value={theme} onChange={onThemeChange} disabled={loading} />
       </div>
 
       {!hasAny && !loading && (

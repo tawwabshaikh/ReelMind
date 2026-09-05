@@ -1,6 +1,8 @@
 // Shared types — no runtime imports, safe for client + server.
 export type Language = 'english' | 'urdu' | 'both'
 
+export type Theme = 'emerald' | 'midnight' | 'sunrise'
+
 export interface KeyPoint {
   heading: string
   detail: string
@@ -45,6 +47,23 @@ export interface GenerateInfographicResponse {
   english: InfographicFile | null
   urdu: InfographicFile | null
   dimensions: { width: number; height: number }
+  theme: Theme
+}
+
+export interface NoteDetail {
+  id: string
+  videoName: string
+  language: Language
+  createdAt: string
+  transcript: string
+  english?: NoteVersion
+  urdu?: NoteVersion
+  infographicEn: InfographicFile | null
+  infographicUr: InfographicFile | null
+}
+
+export interface NoteDetailResponse {
+  note: NoteDetail
 }
 
 export interface HistoryItem {

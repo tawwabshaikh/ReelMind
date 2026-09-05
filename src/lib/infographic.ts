@@ -18,8 +18,121 @@ function fileUrl(p: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// HTML template
+// Themes
 // ---------------------------------------------------------------------------
+
+export type Theme = 'emerald' | 'midnight' | 'sunrise'
+
+const THEME_SET: ReadonlySet<string> = new Set(['emerald', 'midnight', 'sunrise'])
+
+/** Runtime type guard for a theme string coming from the client. */
+export function isTheme(v: unknown): v is Theme {
+  return typeof v === 'string' && THEME_SET.has(v)
+}
+
+export interface ThemeMeta {
+  id: Theme
+  label: string
+  urdu: string
+  swatch: string[] // for UI swatch preview
+}
+
+export const THEMES: ThemeMeta[] = [
+  { id: 'emerald', label: 'Emerald', urdu: 'زمردی', swatch: ['#0f2e2a', '#10b981', '#f59e0b'] },
+  { id: 'midnight', label: 'Midnight', urdu: 'نیلی رات', swatch: ['#0b1020', '#6366f1', '#22d3ee'] },
+  { id: 'sunrise', label: 'Sunrise', urdu: 'طلوع آفتاب', swatch: ['#2a0f1f', '#f97316', '#fbbf24'] },
+]
+
+interface Palette {
+  bgGradientTop: string
+  bgGradientBottom: string
+  cardBg: string
+  cardBorder: string
+  titleColor: string
+  summaryColor: string
+  accent: string
+  accentDark: string
+  amber: string
+  pointHeading: string
+  pointDetail: string
+  tagBg: string
+  tagText: string
+  tagBorder: string
+  footerColor: string
+  badgeText: string
+  badgeShadow: string
+  pointBorderAlpha: string
+  glow: string
+}
+
+const PALETTES: Record<Theme, Palette> = {
+  // Emerald — warm emerald + amber on deep slate (original, refined)
+  emerald: {
+    bgGradientTop: '#0f2e2a',
+    bgGradientBottom: '#1a3c36',
+    cardBg: '#ffffff',
+    cardBorder: '#e2e8f0',
+    titleColor: '#ffffff',
+    summaryColor: '#cbd5d1',
+    accent: '#10b981',
+    accentDark: '#047857',
+    amber: '#f59e0b',
+    pointHeading: '#0f2e2a',
+    pointDetail: '#475569',
+    tagBg: '#fef3c7',
+    tagText: '#92400e',
+    tagBorder: 'rgba(245,158,11,0.35)',
+    footerColor: '#94a3a0',
+    badgeText: '#ffffff',
+    badgeShadow: 'rgba(16,185,129,0.35)',
+    pointBorderAlpha: '#10b981',
+    glow: 'rgba(16,185,129,0.15)',
+  },
+  // Midnight — indigo + cyan on a deep night sky
+  midnight: {
+    bgGradientTop: '#0b1020',
+    bgGradientBottom: '#161b35',
+    cardBg: '#ffffff',
+    cardBorder: '#e2e8f0',
+    titleColor: '#ffffff',
+    summaryColor: '#c7d2fe',
+    accent: '#6366f1',
+    accentDark: '#4338ca',
+    amber: '#22d3ee',
+    pointHeading: '#1e1b4b',
+    pointDetail: '#475569',
+    tagBg: '#e0e7ff',
+    tagText: '#3730a3',
+    tagBorder: 'rgba(99,102,241,0.35)',
+    footerColor: '#94a3b8',
+    badgeText: '#ffffff',
+    badgeShadow: 'rgba(99,102,241,0.4)',
+    pointBorderAlpha: '#6366f1',
+    glow: 'rgba(99,102,241,0.18)',
+  },
+  // Sunrise — warm orange + amber on a deep plum
+  sunrise: {
+    bgGradientTop: '#2a0f1f',
+    bgGradientBottom: '#3d1410',
+    cardBg: '#fffaf5',
+    cardBorder: '#fde2c4',
+    titleColor: '#fff7ed',
+    summaryColor: '#fed7aa',
+    accent: '#f97316',
+    accentDark: '#c2410c',
+    amber: '#fbbf24',
+    pointHeading: '#431407',
+    pointDetail: '#7c2d12',
+    tagBg: '#ffedd5',
+    tagText: '#9a3412',
+    tagBorder: 'rgba(249,115,22,0.35)',
+    footerColor: '#fbbf24',
+    badgeText: '#ffffff',
+    badgeShadow: 'rgba(249,115,22,0.4)',
+    pointBorderAlpha: '#f97316',
+    glow: 'rgba(249,115,22,0.18)',
+  },
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -30,27 +143,20 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 
-const PALETTE = {
-  // Warm emerald + amber on a deep slate canvas — distinctive, not the default blue.
-  bgGradientTop: '#0f2e2a',
-  bgGradientBottom: '#1a3c36',
-  cardBg: '#ffffff',
-  cardBorder: '#e2e8f0',
-  titleColor: '#ffffff',
-  summaryColor: '#cbd5d1',
-  accent: '#10b981', // emerald-500
-  accentDark: '#047857', // emerald-700
-  amber: '#f59e0b', // amber-500
-  pointHeading: '#0f2e2a',
-  pointDetail: '#475569',
-  tagBg: '#fef3c7', // amber-100
-  tagText: '#92400e', // amber-800
-  footerColor: '#94a3a0',
-  badgeBg: '#10b981',
-  badgeText: '#ffffff',
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const m = hex.replace('#', '')
+  return {
+    r: parseInt(m.slice(0, 2), 16),
+    g: parseInt(m.slice(2, 4), 16),
+    b: parseInt(m.slice(4, 6), 16),
+  }
+}
+function rgba(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function buildInfographicHtml(note: StructuredNote): string {
+function buildInfographicHtml(note: StructuredNote, theme: Theme): string {
   const isUrdu = note.language === 'urdu'
   const dir = isUrdu ? 'rtl' : 'ltr'
   const lang = isUrdu ? 'ur' : 'en'
@@ -63,6 +169,7 @@ function buildInfographicHtml(note: StructuredNote): string {
   const headingSize = isUrdu ? '30px' : '22px'
   const detailSize = isUrdu ? '24px' : '18px'
   const summarySize = isUrdu ? '26px' : '19px'
+  const P = PALETTES[theme]
 
   // Number badges: 01, 02, ... — universal, no semantic-icon guessing needed.
   const pointCards = note.keyPoints
@@ -70,7 +177,7 @@ function buildInfographicHtml(note: StructuredNote): string {
       const num = String(i + 1).padStart(2, '0')
       const badgeAlign = isUrdu ? 'right' : 'left'
       return `
-      <div class="point" style="border-${badgeAlign}: 5px solid ${PALETTE.accent};">
+      <div class="point" style="border-${badgeAlign}: 5px solid ${P.accent};">
         <div class="badge">${num}</div>
         <div class="point-body">
           <div class="point-heading">${escapeHtml(kp.heading)}</div>
@@ -100,6 +207,9 @@ function buildInfographicHtml(note: StructuredNote): string {
     }`
     : ''
 
+  // Decorative top-corner glow blobs — give each theme depth without busy detail.
+  const glowColor = P.glow
+
   return `<!DOCTYPE html>
 <html lang="${lang}" dir="${dir}">
 <head>
@@ -113,13 +223,18 @@ function buildInfographicHtml(note: StructuredNote): string {
   }
   body {
     font-family: ${fontFamily};
-    background: linear-gradient(160deg, ${PALETTE.bgGradientTop} 0%, ${PALETTE.bgGradientBottom} 100%);
-    color: ${PALETTE.titleColor};
+    background:
+      radial-gradient(700px 420px at 88% -8%, ${glowColor}, transparent 62%),
+      radial-gradient(560px 360px at -6% 104%, ${rgba(P.amber, 0.10)}, transparent 60%),
+      linear-gradient(160deg, ${P.bgGradientTop} 0%, ${P.bgGradientBottom} 100%);
+    color: ${P.titleColor};
     padding: 56px 52px;
     display: flex;
     flex-direction: column;
     line-height: ${lineHeight};
     -webkit-font-smoothing: antialiased;
+    position: relative;
+    overflow: hidden;
   }
 
   /* ---- Header ---- */
@@ -131,22 +246,22 @@ function buildInfographicHtml(note: StructuredNote): string {
   }
   .logo-dot {
     width: 14px; height: 14px; border-radius: 50%;
-    background: ${PALETTE.amber};
-    box-shadow: 0 0 0 4px rgba(245,158,11,0.25);
+    background: ${P.amber};
+    box-shadow: 0 0 0 4px ${rgba(P.amber, 0.25)};
     flex-shrink: 0;
   }
   .brand {
     font-size: 18px;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: ${PALETTE.accent};
+    color: ${P.accent};
     font-weight: 700;
   }
   .lang-pill {
     margin-inline-start: auto;
-    background: rgba(16,185,129,0.18);
-    color: ${PALETTE.accent};
-    border: 1px solid rgba(16,185,129,0.4);
+    background: ${rgba(P.accent, 0.18)};
+    color: ${P.accent};
+    border: 1px solid ${rgba(P.accent, 0.4)};
     padding: 4px 12px;
     border-radius: 999px;
     font-size: 13px;
@@ -162,19 +277,20 @@ function buildInfographicHtml(note: StructuredNote): string {
     font-size: ${titleSize};
     font-weight: 700;
     line-height: ${isUrdu ? '1.7' : '1.2'};
-    color: ${PALETTE.titleColor};
+    color: ${P.titleColor};
+    text-shadow: 0 2px 16px ${rgba(P.accent, 0.25)};
   }
   .summary {
     margin-top: 14px;
     font-size: ${summarySize};
-    color: ${PALETTE.summaryColor};
+    color: ${P.summaryColor};
     line-height: ${isUrdu ? '2.0' : '1.5'};
   }
 
   .divider {
     height: 3px;
     width: 64px;
-    background: ${PALETTE.amber};
+    background: linear-gradient(90deg, ${P.amber}, ${P.accent});
     border-radius: 2px;
     margin: 20px 0;
   }
@@ -187,37 +303,37 @@ function buildInfographicHtml(note: StructuredNote): string {
     flex: 1;
   }
   .point {
-    background: ${PALETTE.cardBg};
+    background: ${P.cardBg};
     border-radius: 16px;
     padding: 22px 24px;
     display: flex;
     align-items: flex-start;
     gap: 18px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.20), 0 1px 0 ${rgba(P.accent, 0.08)} inset;
   }
   .badge {
     flex-shrink: 0;
     width: 46px; height: 46px;
     border-radius: 12px;
-    background: linear-gradient(135deg, ${PALETTE.accent}, ${PALETTE.accentDark});
-    color: ${PALETTE.badgeText};
+    background: linear-gradient(135deg, ${P.accent}, ${P.accentDark});
+    color: ${P.badgeText};
     display: flex; align-items: center; justify-content: center;
     font-weight: 700;
     font-size: 20px;
     font-family: 'Inter', Arial, sans-serif;
-    box-shadow: 0 4px 10px rgba(16,185,129,0.35);
+    box-shadow: 0 4px 12px ${P.badgeShadow};
   }
   .point-body { flex: 1; min-width: 0; }
   .point-heading {
     font-size: ${headingSize};
     font-weight: 700;
-    color: ${PALETTE.pointHeading};
+    color: ${P.pointHeading};
     margin-bottom: 6px;
     line-height: ${isUrdu ? '1.9' : '1.3'};
   }
   .point-detail {
     font-size: ${detailSize};
-    color: ${PALETTE.pointDetail};
+    color: ${P.pointDetail};
     line-height: ${isUrdu ? '2.0' : '1.5'};
   }
 
@@ -229,9 +345,9 @@ function buildInfographicHtml(note: StructuredNote): string {
     gap: 10px;
   }
   .tag {
-    background: ${PALETTE.tagBg};
-    color: ${PALETTE.tagText};
-    border: 1px solid rgba(245,158,11,0.35);
+    background: ${P.tagBg};
+    color: ${P.tagText};
+    border: 1px solid ${P.tagBorder};
     padding: 7px 16px;
     border-radius: 999px;
     font-size: 15px;
@@ -244,13 +360,18 @@ function buildInfographicHtml(note: StructuredNote): string {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    color: ${PALETTE.footerColor};
+    color: ${P.footerColor};
     font-size: 13px;
     letter-spacing: 1px;
   }
   .footer .gen {
     text-transform: uppercase;
     font-weight: 600;
+  }
+  .theme-tag {
+    color: ${P.accent};
+    font-weight: 600;
+    text-transform: capitalize;
   }
 </style>
 </head>
@@ -276,7 +397,7 @@ function buildInfographicHtml(note: StructuredNote): string {
 
   <div class="footer">
     <span class="gen">Generated by Reel → Notes</span>
-    <span>${new Date().toISOString().slice(0, 10)}</span>
+    <span><span class="theme-tag">${theme}</span> · ${new Date().toISOString().slice(0, 10)}</span>
   </div>
 </body>
 </html>`
@@ -294,9 +415,9 @@ async function ensureOutputDir(): Promise<void> {
  * Render a structured note into a PNG infographic (1080×1350).
  * Returns the filename (served from /generated/<filename>).
  */
-export async function renderInfographic(note: StructuredNote): Promise<string> {
+export async function renderInfographic(note: StructuredNote, theme: Theme = 'emerald'): Promise<string> {
   await ensureOutputDir()
-  const html = buildInfographicHtml(note)
+  const html = buildInfographicHtml(note, theme)
 
   const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] })
   try {
@@ -312,7 +433,7 @@ export async function renderInfographic(note: StructuredNote): Promise<string> {
       clip: { x: 0, y: 0, width: INFOGRAPHIC_WIDTH, height: INFOGRAPHIC_HEIGHT },
       omitBackground: false,
     })
-    const filename = `infographic-${note.language}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`
+    const filename = `infographic-${theme}-${note.language}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`
     await fs.writeFile(path.join(OUTPUT_DIR, filename), buf)
     return filename
   } finally {
@@ -323,13 +444,13 @@ export async function renderInfographic(note: StructuredNote): Promise<string> {
 /**
  * Render two infographics (one per language) for "both" mode.
  */
-export async function renderInfographics(notes: {
-  english?: StructuredNote
-  urdu?: StructuredNote
-}): Promise<{ english?: string; urdu?: string }> {
+export async function renderInfographics(
+  notes: { english?: StructuredNote; urdu?: StructuredNote },
+  theme: Theme = 'emerald',
+): Promise<{ english?: string; urdu?: string }> {
   const out: { english?: string; urdu?: string } = {}
-  if (notes.english) out.english = await renderInfographic(notes.english)
-  if (notes.urdu) out.urdu = await renderInfographic(notes.urdu)
+  if (notes.english) out.english = await renderInfographic(notes.english, theme)
+  if (notes.urdu) out.urdu = await renderInfographic(notes.urdu, theme)
   return out
 }
 

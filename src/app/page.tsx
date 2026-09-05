@@ -15,11 +15,18 @@ import {
   AlertCircle,
   Github,
   Heart,
+  RotateCw,
+  Languages,
+  Wand2,
+  Zap,
+  ShieldCheck,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { UploadZone } from '@/components/reel-notes/upload-zone'
 import { LanguageSelector } from '@/components/reel-notes/language-selector'
 import { NotesView } from '@/components/reel-notes/notes-view'
@@ -28,24 +35,27 @@ import { InfographicView } from '@/components/reel-notes/infographic-view'
 import { HistoryPanel } from '@/components/reel-notes/history-panel'
 import type {
   Language,
+  Theme,
   TranscribeResponse,
   GenerateNotesResponse,
   GenerateInfographicResponse,
+  NoteDetailResponse,
   InfographicFile,
 } from '@/lib/types'
 
 type Stage = 'idle' | 'transcribing' | 'generating-notes' | 'done'
 
-const STEPS: { key: Stage | 'infographic'; label: string }[] = [
-  { key: 'transcribing', label: 'Transcribe' },
-  { key: 'generating-notes', label: 'Summarize' },
-  { key: 'done', label: 'Notes' },
-  { key: 'infographic', label: 'Infographic' },
+const STEPS: { key: Stage | 'infographic'; label: string; urdu: string }[] = [
+  { key: 'transcribing', label: 'Transcribe', urdu: 'ٹرانسکرائب' },
+  { key: 'generating-notes', label: 'Summarize', urdu: 'خلاصہ' },
+  { key: 'done', label: 'Notes', urdu: 'نوٹس' },
+  { key: 'infographic', label: 'Infographic', urdu: 'انفوگرافک' },
 ]
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null)
   const [language, setLanguage] = useState<Language>('english')
+  const [theme, setTheme] = useState<Theme>('emerald')
 
   const [stage, setStage] = useState<Stage>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -58,8 +68,11 @@ export default function Home() {
   const [infographicLoading, setInfographicLoading] = useState(false)
 
   const [activeTab, setActiveTab] = useState<string>('notes')
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
+  const [loadedNoteId, setLoadedNoteId] = useState<string | null>(null)
+  const [regeneratingNotes, setRegeneratingNotes] = useState(false)
 
-  const busy = stage === 'transcribing' || stage === 'generating-notes'
+  const busy = stage === 'transcribing' || stage === 'generating-notes' || regeneratingNotes
 
   const reset = useCallback(() => {
     setTranscript(null)
@@ -68,6 +81,7 @@ export default function Home() {
     setInfographicUr(null)
     setError(null)
     setStage('idle')
+    setLoadedNoteId(null)
   }, [])
 
   const handleFile = useCallback(
@@ -88,6 +102,7 @@ export default function Home() {
     setNotes(null)
     setInfographicEn(null)
     setInfographicUr(null)
+    setLoadedNoteId(null)
     setActiveTab('transcript')
 
     // ---- Stage 1: transcribe ----
@@ -127,7 +142,9 @@ export default function Home() {
       if (!res.ok) throw new Error(data?.error || `Notes generation failed (${res.status})`)
       const n = data as GenerateNotesResponse
       setNotes(n)
+      setLoadedNoteId(n.noteId)
       setStage('done')
+      setHistoryRefreshKey((k) => k + 1)
       toast.success(
         language === 'both'
           ? 'Bilingual notes ready (EN + UR)'
@@ -143,6 +160,40 @@ export default function Home() {
     }
   }, [file, language])
 
+  /** Regenerate just the notes from the existing transcript (no re-upload). */
+  const regenerateNotes = useCallback(async () => {
+    if (!transcript) return
+    setRegeneratingNotes(true)
+    setError(null)
+    setInfographicEn(null)
+    setInfographicUr(null)
+    setActiveTab('notes')
+    try {
+      const res = await fetch('/api/generate-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript: transcript.transcript,
+          language,
+          videoName: transcript.meta.filename,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || `Notes generation failed (${res.status})`)
+      const n = data as GenerateNotesResponse
+      setNotes(n)
+      setLoadedNoteId(n.noteId)
+      setHistoryRefreshKey((k) => k + 1)
+      toast.success('Notes regenerated')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Notes regeneration error'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setRegeneratingNotes(false)
+    }
+  }, [transcript, language])
+
   const generateInfographic = useCallback(async () => {
     if (!notes) return
     setInfographicLoading(true)
@@ -154,7 +205,8 @@ export default function Home() {
         body: JSON.stringify({
           english: notes.english?.structured,
           urdu: notes.urdu?.structured,
-          noteId: notes.noteId,
+          noteId: notes.noteId ?? loadedNoteId,
+          theme,
         }),
       })
       const data = await res.json()
@@ -162,8 +214,9 @@ export default function Home() {
       const r = data as GenerateInfographicResponse
       setInfographicEn(r.english)
       setInfographicUr(r.urdu)
+      setHistoryRefreshKey((k) => k + 1)
       setActiveTab('infographic')
-      toast.success('Infographic rendered')
+      toast.success(`Infographic rendered · ${theme}`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Infographic error'
       setError(msg)
@@ -171,7 +224,45 @@ export default function Home() {
     } finally {
       setInfographicLoading(false)
     }
-  }, [notes])
+  }, [notes, theme, loadedNoteId])
+
+  /** Load a historical note's full detail back into the workspace. */
+  const loadHistoryNote = useCallback(async (id: string) => {
+    setError(null)
+    try {
+      const res = await fetch(`/api/notes/${id}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || `Load failed (${res.status})`)
+      const d = data as NoteDetailResponse
+      const n = d.note
+      setTranscript({
+        transcript: n.transcript,
+        meta: {
+          filename: n.videoName,
+          sizeBytes: 0,
+          durationSec: null,
+          wordCount: n.transcript.split(/\s+/).filter(Boolean).length,
+        },
+      })
+      setNotes({
+        noteId: n.id,
+        language: n.language,
+        english: n.english,
+        urdu: n.urdu,
+      })
+      setInfographicEn(n.infographicEn)
+      setInfographicUr(n.infographicUr)
+      setLoadedNoteId(n.id)
+      setStage('done')
+      setFile(null)
+      setActiveTab('notes')
+      toast.success(`Loaded: ${n.videoName}`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Load error'
+      setError(msg)
+      toast.error(msg)
+    }
+  }, [])
 
   const stageIndex = (() => {
     if (stage === 'idle') return -1
@@ -198,6 +289,9 @@ export default function Home() {
             <p className="text-[11px] text-muted-foreground">Bilingual video notes + infographic generator</p>
           </div>
           <div className="ml-auto hidden items-center gap-2 sm:flex">
+            <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-700">
+              <Sparkles className="h-3 w-3" /> v2
+            </Badge>
             <a
               href="https://github.com"
               target="_blank"
@@ -225,6 +319,14 @@ export default function Home() {
             Instagram-friendly PNG infographic with correct RTL text shaping.
           </p>
         </div>
+
+        {/* Feature strip */}
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <FeatureChip icon={<Languages className="h-4 w-4" />} title="Bilingual" sub="EN · UR · Both" />
+          <FeatureChip icon={<Wand2 className="h-4 w-4" />} title="3 themes" sub="Emerald · Midnight · Sunrise" />
+          <FeatureChip icon={<ImageIcon className="h-4 w-4" />} title="PNG 1080×1350" sub="Instagram-ready" />
+          <FeatureChip icon={<ShieldCheck className="h-4 w-4" />} title="History" sub="Reload any past run" />
+        </div>
       </section>
 
       {/* ---------------- Main ---------------- */}
@@ -245,24 +347,43 @@ export default function Home() {
                 <UploadZone file={file} onFile={handleFile} disabled={busy} />
                 <LanguageSelector value={language} onChange={setLanguage} disabled={busy} />
 
-                <Button
-                  onClick={runPipeline}
-                  disabled={!file || busy}
-                  className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm hover:from-emerald-700 hover:to-emerald-800"
-                  size="lg"
-                >
-                  {busy ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {stage === 'transcribing' ? 'Transcribing…' : 'Generating notes…'}
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Transcribe &amp; generate notes
-                    </>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={runPipeline}
+                    disabled={!file || busy}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm hover:from-emerald-700 hover:to-emerald-800"
+                    size="lg"
+                  >
+                    {busy ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {stage === 'transcribing'
+                          ? 'Transcribing…'
+                          : stage === 'generating-notes'
+                            ? 'Generating notes…'
+                            : regeneratingNotes
+                              ? 'Regenerating…'
+                              : 'Working…'}
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Transcribe &amp; generate notes
+                      </>
+                    )}
+                  </Button>
+
+                  {transcript && !busy && (
+                    <Button
+                      onClick={regenerateNotes}
+                      variant="outline"
+                      className="w-full border-emerald-500/40 text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <RotateCw className="mr-2 h-3.5 w-3.5" />
+                      Regenerate notes only
+                    </Button>
                   )}
-                </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -274,7 +395,7 @@ export default function Home() {
               <CardContent>
                 <ol className="space-y-2.5">
                   {STEPS.map((s, i) => {
-                    const done = (i < stageIndex) || (s.key === 'infographic' && infographicDone)
+                    const done = i < stageIndex || (s.key === 'infographic' && infographicDone)
                     const activeNow = i === stageIndex || (s.key === 'infographic' && infographicLoading)
                     return (
                       <li key={s.key} className="flex items-center gap-2.5 text-sm">
@@ -287,6 +408,9 @@ export default function Home() {
                         )}
                         <span className={done || activeNow ? 'font-medium text-foreground' : 'text-muted-foreground'}>
                           {s.label}
+                        </span>
+                        <span className="font-urdu text-xs text-muted-foreground" dir="rtl">
+                          {s.urdu}
                         </span>
                         {s.key === 'infographic' && !done && !activeNow && notes && (
                           <span className="ml-auto text-[10px] text-muted-foreground">optional</span>
@@ -313,7 +437,14 @@ export default function Home() {
               <CardHeader className="pb-3">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <CardTitle className="text-base">Results</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      Results
+                      {loadedNoteId && (
+                        <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                          from history
+                        </Badge>
+                      )}
+                    </CardTitle>
                     <TabsList>
                       <TabsTrigger value="notes" disabled={!notes}>
                         <FileText className="mr-1.5 h-3.5 w-3.5" /> Notes
@@ -364,6 +495,8 @@ export default function Home() {
                           loading={infographicLoading}
                           canGenerate={!!notes}
                           onGenerate={generateInfographic}
+                          theme={theme}
+                          onThemeChange={setTheme}
                         />
                       </div>
                     ) : (
@@ -382,14 +515,15 @@ export default function Home() {
 
         {/* History */}
         <div className="mt-6">
-          <HistoryPanel />
+          <HistoryPanel onLoad={loadHistoryNote} activeId={loadedNoteId} refreshKey={historyRefreshKey} />
         </div>
       </main>
 
       {/* ---------------- Footer ---------------- */}
       <footer className="mt-auto border-t border-border/60 bg-background/60">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:px-6">
-          <p>
+          <p className="flex items-center gap-1.5">
+            <Zap className="h-3 w-3 text-amber-500" />
             Reel → Notes · Next.js 16 · Playwright + Noto Nastaliq Urdu · ffmpeg + z-ai ASR/LLM
           </p>
           <p className="inline-flex items-center gap-1">
@@ -397,6 +531,20 @@ export default function Home() {
           </p>
         </div>
       </footer>
+    </div>
+  )
+}
+
+function FeatureChip({ icon, title, sub }: { icon: React.ReactNode; title: string; sub: string }) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 backdrop-blur-sm">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+        {icon}
+      </div>
+      <div className="min-w-0 leading-tight">
+        <div className="text-xs font-semibold">{title}</div>
+        <div className="truncate text-[10px] text-muted-foreground">{sub}</div>
+      </div>
     </div>
   )
 }
@@ -412,3 +560,6 @@ function EmptyState({ icon, title, desc }: { icon: React.ReactNode; title: strin
     </div>
   )
 }
+
+// Keep the Download import referenced (used by child components via re-export pattern)
+void Download

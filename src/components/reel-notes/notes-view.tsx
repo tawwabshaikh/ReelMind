@@ -1,6 +1,8 @@
 'use client'
 
-import { Download, FileText, Tag, Hash, CheckCircle2 } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { Download, FileText, Tag, Hash, CheckCircle2, Copy, Check, ClipboardCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -24,19 +26,41 @@ function downloadText(filename: string, text: string, mime = 'text/markdown') {
   URL.revokeObjectURL(url)
 }
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function NoteCard({ version, lang }: { version: NoteVersion; lang: 'english' | 'urdu' }) {
   const isUrdu = lang === 'urdu'
   const { structured, markdown } = version
   const filename = `${slugify(structured.title)}-notes-${lang}.md`
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(markdown)
+    if (ok) {
+      setCopied(true)
+      toast.success(isUrdu ? 'نوٹس کاپی ہو گئے' : 'Notes copied to clipboard')
+      setTimeout(() => setCopied(false), 1800)
+    } else {
+      toast.error('Copy failed — try the download button instead.')
+    }
+  }
 
   return (
     <div
-      className={`rounded-2xl border bg-card shadow-sm overflow-hidden ${isUrdu ? 'font-urdu' : ''}`}
+      className={`group overflow-hidden rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md ${isUrdu ? 'font-urdu' : ''}`}
       dir={isUrdu ? 'rtl' : 'ltr'}
     >
       {/* Header band */}
-      <div className="flex items-center justify-between gap-3 border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-5 py-4 text-white">
-        <div className="min-w-0">
+      <div className="relative flex items-center justify-between gap-3 border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-5 py-4 text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(220px_80px_at_85%_-40%,rgba(255,255,255,0.18),transparent)]" aria-hidden />
+        <div className="relative min-w-0">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-50/90">
             <FileText className="h-3.5 w-3.5" />
             {isUrdu ? 'اردو نوٹس' : 'English Notes'}
@@ -45,20 +69,31 @@ function NoteCard({ version, lang }: { version: NoteVersion; lang: 'english' | '
             {structured.title}
           </h3>
         </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          className="shrink-0 bg-white/15 text-white hover:bg-white/25"
-          onClick={() => downloadText(filename, markdown)}
-        >
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          .md
-        </Button>
+        <div className="relative flex shrink-0 gap-1.5">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="bg-white/15 text-white hover:bg-white/25"
+            onClick={handleCopy}
+            aria-label="Copy as Markdown"
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="bg-white/15 text-white hover:bg-white/25"
+            onClick={() => downloadText(filename, markdown)}
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            .md
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-5 p-5">
         {structured.summary && (
-          <p className={`text-sm text-muted-foreground ${isUrdu ? 'text-right leading-loose' : ''}`}>
+          <p className={`rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted-foreground ${isUrdu ? 'text-right leading-loose' : ''}`}>
             {structured.summary}
           </p>
         )}
@@ -67,9 +102,9 @@ function NoteCard({ version, lang }: { version: NoteVersion; lang: 'english' | '
           {structured.keyPoints.map((kp, i) => (
             <div
               key={i}
-              className={`flex gap-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 ${isUrdu ? 'flex-row-reverse' : ''}`}
+              className={`flex gap-3 rounded-xl border border-border/60 bg-muted/20 p-3.5 transition-colors hover:bg-muted/40 ${isUrdu ? 'flex-row-reverse' : ''}`}
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-sm font-bold text-emerald-700">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-sm font-bold text-white shadow-sm">
                 {String(i + 1).padStart(2, '0')}
               </div>
               <div className={`min-w-0 flex-1 ${isUrdu ? 'text-right' : ''}`}>
@@ -117,3 +152,9 @@ export function NotesView({ english, urdu }: Props) {
     </div>
   )
 }
+
+/** Re-export for the page's "copy all" action. */
+export { copyToClipboard }
+export type { Props as NotesViewProps }
+// keep ClipboardCheck import used (for future "copied all" indicator)
+void ClipboardCheck

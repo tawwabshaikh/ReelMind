@@ -77,3 +77,58 @@ Stage Summary:
   * The Urdu LLM occasionally emits malformed JSON on the first attempt (missing braces, nested-keyPoints mistake). Mitigated with jsonrepair + 3-attempt retry — in testing the 2nd or 3rd attempt always succeeded. Could be further hardened by switching to a stricter JSON-mode if the model exposes one.
   * Video upload cap is 120 MB / 300s route timeout — sufficient for short reels; longer videos would need chunked upload or a background job queue.
   * agent-browser's native `upload` command does not attach real file bytes in this environment; the automated QA injects files via fetch+DataTransfer. Real users uploading through the browser UI are unaffected.
+
+---
+Task ID: 7 (cron round 1)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA via agent-browser, then advance with mandatory styling improvements + new features (no bugs to fix — core was stable).
+
+## Current project status (assessment)
+- Core features (bilingual EN/UR notes + Playwright infographic) were COMPLETE and stable from the previous round.
+- QA at start of this round: dev.log clean (no errors/warnings), `bun run lint` → 0/0, GET / → 200, GET /api/notes → 200, agent-browser smoke test rendered correctly with history rows already populated.
+- No bugs, test failures, build failures, or runtime errors found → proceeded to enhancement work per the cron mandate ([Mandatory] improve styling + add features).
+
+## Current goals / completed modifications / verification
+
+### FEATURE A — Multiple infographic themes (emerald / midnight / sunrise)
+- `src/lib/infographic.ts`: refactored the single hardcoded `PALETTE` into a `PALETTES: Record<Theme, Palette>` map with 3 distinct palettes. Each theme has its own bg gradient, accent, tag, badge, glow colors. Added `Theme` type + `isTheme()` type guard + `THEMES` metadata (label/urdu/swatch) for the UI.
+- Enriched the HTML template: added radial glow blobs (top-right + bottom-left) for depth, gradient divider (amber→accent), title text-shadow, inset accent line on point cards, theme name shown in the footer.
+- Threaded `theme` through `renderInfographic(note, theme)` + `renderInfographics(notes, theme)` + the API route + frontend.
+- New `ThemeSelector` component (`src/components/reel-notes/theme-selector.tsx`): 3 swatch cards showing the palette colors + EN/UR labels, with active-state ring.
+- Filenames now embed the theme: `infographic-{theme}-{lang}-{ts}-{rand}.png`.
+- **Verification**: agent-browser selected Midnight → Regenerate → produced `infographic-midnight-english/urdu-*.png` (2160×2700, ok:true). VLM confirmed: "background is dark indigo/midnight (not green), accent is indigo/purple, Urdu still proper Nastaliq + right-aligned, no rendering issues." Same for Sunrise ("deep dark brown bg, vibrant orange accent"). All 3 themes visually distinct.
+
+### FEATURE B — History detail reload (click a row → reload into workspace)
+- New route `GET /api/notes/[id]` (`src/app/api/notes/[id]/route.ts`): returns full note detail (transcript, parsed EN/UR structured notes + markdown, infographic file refs). Reuses `structuredNoteToMarkdown` so the reloaded notes are immediately downloadable.
+- `HistoryPanel` rewritten: rows are now clickable buttons with hover/active states, language badge, EN✓/UR✓/img indicators, relative time-ago ("21h ago"), and a loading spinner per-row. Shows a hint "Click any row to reload it into the workspace".
+- `page.tsx` `loadHistoryNote(id)`: fetches the detail, populates transcript + notes + infographics + sets `loadedNoteId` (highlights the active row + shows a "from history" badge in the Results header). Clears the file input (since we're working from saved data, not a fresh upload).
+- **Verification**: agent-browser clicked a history row → all 3 tabs enabled, Notes tab populated with EN ("Productive Deep Work") + UR (Nastaliq title) + Copy/.md buttons, "Regenerate notes only" button appeared. Active row highlighted. No console errors.
+
+### FEATURE C — Copy-to-clipboard + transcript stats + regenerate-notes-only
+- `NotesView`: each note card now has a Copy button (clipboard icon → check icon on success, with EN/UR toast: "Notes copied to clipboard" / "نوٹس کاپی ہو گئے"). Header band got a radial sheen overlay; point cards use gradient badges + hover bg.
+- `TranscriptView`: added stats chips — source filename, duration, words, chars, + an emerald reading-time chip (est. @200wpm). Copy transcript button added alongside .txt download.
+- `page.tsx`: new "Regenerate notes only" button (appears once a transcript exists) — re-runs `/api/generate-notes` on the existing transcript without re-uploading. Useful for trying a different language or getting a fresh summary.
+- **Verification**: agent-browser saw all 4 stat values (66 words, 431 chars, 20s read, source, duration), Copy buttons present on both EN+UR cards, Regenerate-notes-only button clicked → POST /api/generate-notes 200 in 2.5s → fresh notes loaded.
+
+### Styling polish (mandatory)
+- Hero: added a 4-card feature strip (Bilingual / 3 themes / PNG 1080×1350 / History) with icon tiles.
+- Header: added "v2" badge.
+- UploadZone: added decorative blurred corner accents (emerald + amber).
+- Notes cards: gradient header sheen, gradient point badges, hover bg transitions.
+- Infographic cards: ring + hover scale on the image.
+- Pipeline stepper: added Urdu labels next to each step (ٹرانسکرائب / خلاصہ / نوٹس / انفوگرافک).
+- Footer: added Zap icon, refined copy.
+- History rows: full visual redesign with badges + time-ago + chevron + active highlight.
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings.
+- dev.log: all API calls 200 (transcribe, generate-notes, generate-infographic, notes, notes/[id]); no errors/exceptions.
+- agent-browser: page renders, history click-to-load works, theme selector + regenerate produces themed PNGs (verified 3 themes via VLM), transcript stats display, copy buttons present, no console errors.
+- Sticky footer: sticksToBottom:true on 1600px viewport; mobile 375px renders.
+- Generated assets: 8 PNGs across emerald/midnight/sunrise × en/urdu.
+
+## Unresolved issues / risks + next-phase recommendations
+- The Urdu LLM JSON malformation (noted in prior round) remains mitigated by jsonrepair + 3-attempt retry; no failures observed this round (generate-notes returned 200 in 2.5s on the regenerate test). Could still be hardened with a JSON-mode if the model exposes one.
+- Clipboard `readText` is blocked in headless automation (browser permission) — the copy *write* succeeds (button + toast confirm); only verification-by-readback is unavailable in agent-browser. Real users are unaffected.
+- History rows loaded from DB have `durationSec: null` and `sizeBytes: 0` (we don't store these on the Note row) — shown as "—" in the transcript stats. **Recommendation for next round**: add `durationSec` + `sizeBytes` columns to the Note schema so reloaded history shows full stats. Low effort, nice polish.
+- **Next-phase feature ideas** (in priority order): (1) multi-note comparison view; (2) export combined PDF (notes + infographic); (3) shareable public link per note; (4) tag-based filtering in the history panel; (5) editable notes (inline edit of key points before infographic render).

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { StructuredNote } from '@/lib/notes'
-import { renderInfographic, renderInfographics, INFOGRAPHIC_DIMENSIONS } from '@/lib/infographic'
+import { renderInfographic, renderInfographics, INFOGRAPHIC_DIMENSIONS, isTheme } from '@/lib/infographic'
 import { db } from '@/lib/db'
 
 export const runtime = 'nodejs'
@@ -11,6 +11,7 @@ interface InfographicBody {
   english?: StructuredNote
   urdu?: StructuredNote
   noteId?: string | null
+  theme?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -21,6 +22,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Provide at least one of "english" or "urdu" structured notes.' }, { status: 400 })
     }
 
+    const theme = isTheme(body.theme) ? body.theme : 'emerald'
+
     // Validate + normalise language field on each note (in case the client omitted it)
     const normalise = (n: StructuredNote | undefined, lang: 'english' | 'urdu') => {
       if (!n) return undefined
@@ -29,7 +32,7 @@ export async function POST(req: NextRequest) {
     const en = normalise(body.english, 'english')
     const ur = normalise(body.urdu, 'urdu')
 
-    const files = await renderInfographics({ english: en, urdu: ur })
+    const files = await renderInfographics({ english: en, urdu: ur }, theme)
 
     // Persist the generated filenames back onto the Note record (if we have an id).
     if (body.noteId) {
@@ -50,6 +53,7 @@ export async function POST(req: NextRequest) {
       english: files.english ? { filename: files.english, url: `/generated/${files.english}` } : null,
       urdu: files.urdu ? { filename: files.urdu, url: `/generated/${files.urdu}` } : null,
       dimensions: INFOGRAPHIC_DIMENSIONS,
+      theme,
     })
   } catch (err) {
     console.error('[/api/generate-infographic] error', err)
