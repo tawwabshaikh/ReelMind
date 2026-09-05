@@ -2,6 +2,7 @@ import { chromium } from 'playwright'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { StructuredNote } from './notes'
+import { colorForTag, shade, hexToRgbTriplet } from './tag-colors'
 
 const FONT_DIR = path.join(process.cwd(), 'public', 'fonts')
 const OUTPUT_DIR = path.join(process.cwd(), 'public', 'generated')
@@ -188,7 +189,10 @@ function buildInfographicHtml(note: StructuredNote, theme: Theme): string {
     .join('\n')
 
   const tagPills = note.tags
-    .map((t) => `<span class="tag">${escapeHtml(t)}</span>`)
+    .map((t) => {
+      const c = colorForTag(t, note.tagColors)
+      return `<span class="tag" style="background:${shade(c, 0.85)};color:${shade(c, -0.3)};border-color:${shade(c, 0.6)};">${escapeHtml(t)}</span>`
+    })
     .join('')
 
   const fontFaces = isUrdu
@@ -490,7 +494,10 @@ function buildNotesSheetHtml(note: StructuredNote): string {
     })
     .join('\n')
 
-  const tagPills = note.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')
+  const tagPills = note.tags.map((t) => {
+    const c = colorForTag(t, note.tagColors)
+    return `<span class="tag" style="background:${shade(c, 0.85)};color:${shade(c, -0.3)};border-color:${shade(c, 0.6)};">${escapeHtml(t)}</span>`
+  }).join('')
 
   const fontFaces = isUrdu
     ? `

@@ -2,7 +2,24 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Pencil, X, Plus, Trash2, Loader2, Save, Tag, Hash, Palette } from 'lucide-react'
+import { Pencil, X, Plus, Trash2, Loader2, Save, Tag, Hash, Palette, GripVertical } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -56,6 +73,70 @@ function toEditable(v: NoteVersion | undefined): EditableNote {
   }
 }
 
+/** A single sortable key-point editor row with a drag handle. */
+function SortableKeyPoint({
+  kp,
+  index,
+  isUrdu,
+  onUpdate,
+  onRemove,
+}: {
+  kp: KeyPoint
+  index: number
+  isUrdu: boolean
+  onUpdate: (field: keyof KeyPoint, val: string) => void
+  onRemove: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `kp-${index}` })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : undefined,
+    opacity: isDragging ? 0.8 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style} className={`rounded-lg border bg-muted/20 p-3 ${isDragging ? 'shadow-lg ring-2 ring-emerald-500/40' : ''}`}>
+      <div className="mb-2 flex items-center gap-2">
+        <button
+          type="button"
+          className="flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+          aria-label="Drag to reorder"
+          title="Drag to reorder"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-emerald-500/15 text-xs font-bold text-emerald-700">
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <Input
+          value={kp.heading}
+          onChange={(e) => onUpdate('heading', e.target.value)}
+          placeholder="Heading"
+          className={`h-8 text-sm ${isUrdu ? 'text-right' : ''}`}
+        />
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+          aria-label="Remove point"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <Textarea
+        value={kp.detail}
+        onChange={(e) => onUpdate('detail', e.target.value)}
+        placeholder="Detail"
+        rows={2}
+        className={`text-sm ${isUrdu ? 'text-right' : ''}`}
+      />
+    </div>
+  )
+}
+
 export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoName, onSaved }: Props) {
   const hasEn = !!english
   const hasUr = !!urdu
@@ -65,6 +146,20 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
   const [saving, setSaving] = useState(false)
   const [tagInputEn, setTagInputEn] = useState('')
   const [tagInputUr, setTagInputUr] = useState('')
+
+  // DnD sensors — pointer for mouse/touch, keyboard for accessibility
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const from = parseInt(String(active.id).replace('kp-', ''), 10)
+    const to = parseInt(String(over.id).replace('kp-', ''), 10)
+    movePoint(from, to)
+  }
 
   // Re-sync local state when the modal opens or the source notes change.
   useEffect(() => {
@@ -115,6 +210,10 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
   }
   const removePoint = (i: number) => {
     setCurrent({ ...current, keyPoints: current.keyPoints.filter((_, idx) => idx !== i) })
+  }
+  const movePoint = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= current.keyPoints.length || to >= current.keyPoints.length) return
+    setCurrent({ ...current, keyPoints: arrayMove(current.keyPoints, from, to) })
   }
 
   const handleSave = async () => {
@@ -221,51 +320,44 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
           {/* Key points */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Key points ({current.keyPoints.length})
+                {current.keyPoints.length > 1 && (
+                  <span className="font-normal normal-case text-muted-foreground/70">· drag to reorder</span>
+                )}
               </Label>
               <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={addPoint} disabled={current.keyPoints.length >= 6}>
                 <Plus className="h-3 w-3" /> Add point
               </Button>
             </div>
-            <div className="space-y-2">
-              {current.keyPoints.map((kp, i) => (
-                <div key={i} className="rounded-lg border bg-muted/20 p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500/15 text-xs font-bold text-emerald-700">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <Input
-                      value={kp.heading}
-                      onChange={(e) => updatePoint(i, 'heading', e.target.value)}
-                      placeholder="Heading"
-                      className={`h-8 text-sm ${isUrdu ? 'text-right' : ''}`}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={current.keyPoints.map((_, i) => `kp-${i}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {current.keyPoints.map((kp, i) => (
+                    <SortableKeyPoint
+                      key={`kp-${i}`}
+                      kp={kp}
+                      index={i}
+                      isUrdu={isUrdu}
+                      onUpdate={(field, val) => updatePoint(i, field, val)}
+                      onRemove={() => removePoint(i)}
                     />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => removePoint(i)}
-                      aria-label="Remove point"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <Textarea
-                    value={kp.detail}
-                    onChange={(e) => updatePoint(i, 'detail', e.target.value)}
-                    placeholder="Detail"
-                    rows={2}
-                    className={`text-sm ${isUrdu ? 'text-right' : ''}`}
-                  />
+                  ))}
                 </div>
-              ))}
-              {current.keyPoints.length === 0 && (
-                <p className="rounded-lg border border-dashed py-4 text-center text-xs text-muted-foreground">
-                  No points. Click “Add point”.
-                </p>
-              )}
-            </div>
+              </SortableContext>
+            </DndContext>
+            {current.keyPoints.length === 0 && (
+              <p className="rounded-lg border border-dashed py-4 text-center text-xs text-muted-foreground">
+                No points. Click “Add point”.
+              </p>
+            )}
           </div>
 
           {/* Tags */}

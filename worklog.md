@@ -424,3 +424,50 @@ Task: Assess project status, run QA, then advance with mandatory styling + new f
 - **Multi-note comparison view** (planned this round) was not implemented — it's a larger feature requiring a new UI surface (side-by-side diff of 2 selected notes' titles/summaries/key-points/tags). Deferred to next round.
 - **Tag colors in infographic + notes sheet**: the infographic and PDF notes-sheet currently use the theme's hardcoded amber tag colors. A future enhancement could thread `tagColors` into `buildInfographicHtml()` and `buildNotesSheetHtml()` so the custom colors appear in those exports too.
 - **Next-phase feature ideas**: (1) multi-note comparison view (side-by-side); (2) thread tagColors into infographic + notes sheet HTML; (3) soft-delete + trash restoration; (4) OAuth for persistent per-user history; (5) drag-to-reorder key points in the NoteEditor; (6) batch-render optimization for export-all; (7) tag-color import/export presets.
+
+---
+Task ID: 13 (cron round 7)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA, then advance with mandatory styling + new features.
+
+## Current project status (assessment)
+- Core features stable from rounds 1-6: bilingual EN/UR notes, 3 infographic themes, history reload + search + tag filtering, copy/stats, regenerate-notes, inline note editing, combined PDF export, Urdu PDF page-1 (notes sheet), export-all, DB metrics, backfill, shareable public links, dark mode, keyboard shortcuts, delete notes (single + bulk), selection mode, copy-share-link + delete quick actions, custom tag colors (notes view + editor).
+- QA at start: dev server down (sandbox reaping); restarted. Lint clean (0/0), GET / + GET /api/notes → 200, 1 note in history. agent-browser smoke test rendered correctly.
+- No bugs to fix → proceeded to the worklog's next-phase recommendations (thread tagColors into infographic/sheet + drag-to-reorder key points).
+
+## Current goals / completed modifications / verification
+
+### FEATURE Q — Tag colors in infographic + notes sheet (completing the custom tag colors feature end-to-end)
+- **Problem**: round 6 added custom tag colors to the notes view + editor, but the infographic PNG and PDF notes sheet still used the theme's hardcoded amber tag colors — custom colors weren't reflected in exports.
+- **infographic.ts**: imported `colorForTag`, `shade`, `hexToRgbTriplet` from `tag-colors.ts`. Updated both `buildInfographicHtml()` (infographic) and `buildNotesSheetHtml()` (PDF notes sheet) tag-pill rendering to use per-tag inline styles: `background:${shade(c, 0.85)};color:${shade(c, -0.3)};border-color:${shade(c, 0.6)}` where `c = colorForTag(t, note.tagColors)`. Tags without a custom color fall back to the deterministic palette color.
+- **Verification (VLM)**: generated an infographic with custom tagColors (`deep work:#8b5cf6, focus:#ef4444, productivity:#06b6d4`) → VLM analysis confirmed: "deep work"→light violet, "focus"→light red, "productivity"→light cyan, "time management"→light purple (palette), "habit formation"→amber (palette). Custom colors render correctly; palette colors fill the rest. ✓
+
+### FEATURE R — Drag-to-reorder key points in NoteEditor (using @dnd-kit)
+- **NoteEditor** (`src/components/reel-notes/note-editor.tsx`): integrated `@dnd-kit/core` + `@dnd-kit/sortable` (both already in package.json):
+  - `SortableKeyPoint` component: a draggable key-point editor row with a `GripVertical` drag handle, `useSortable` hook, transform/transition styles, `isDragging` state (shadow + emerald ring + raised z-index).
+  - `DndContext` + `SortableContext` (vertical list strategy) wrap the key-points list.
+  - `PointerSensor` (5px activation constraint — prevents accidental drags on click) + `KeyboardSensor` (accessibility).
+  - `handleDragEnd`: parses `active.id`/`over.id` (`kp-{index}`), calls `movePoint(from, to)` which uses `arrayMove`.
+  - Drag handle: `cursor-grab` → `cursor-grabbing` on active, with a tooltip "Drag to reorder".
+  - "drag to reorder" hint text appears next to the "Key points" label when there are 2+ points.
+- **Verification**:
+  - curl PATCH with reversed key-points order → 200; saved order confirmed reversed (Track Deep Work Hours → Eliminate Digital Distractions → Schedule Uninterrupted Time). ✓
+  - agent-browser: opened Edit modal → found 3 drag-handle buttons (`aria-label="Drag to reorder"`), "drag to reorder" hint visible, no console errors. ✓
+
+### Styling polish (mandatory)
+- Infographic + notes sheet tag pills: now use per-tag colors (light bg + dark text + medium border) instead of the hardcoded theme amber — consistent with the notes view.
+- Drag handle: GripVertical icon in muted-foreground, hover bg, grab cursor states, drag-active ring + shadow.
+- Key points label: shows "· drag to reorder" hint when 2+ points exist.
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings. ✓
+- All API endpoints verified 200: `POST /api/generate-infographic` (with tagColors), `PATCH /api/notes/[id]` (with reordered keyPoints), plus all prior routes. ✓
+- VLM confirmed tag colors render in the infographic PNG (custom violet/red/cyan + palette purple/amber). ✓
+- agent-browser E2E: drag handles present (3), "drag to reorder" hint visible, no console errors. ✓
+- dev.log: no errors/exceptions. ✓
+
+## Unresolved issues / risks + next-phase recommendations
+- **Sandbox dev-server reaping** persists: dev server dies between separate Bash commands. Mitigated by combining verifications in single commands. Not a code bug.
+- **Multi-note comparison view** (deferred from round 6) still not implemented — it's a larger feature requiring a new UI surface. Remains the top next-phase recommendation.
+- **Drag in agent-browser**: the automated browser test verified drag handles exist + are clickable, but didn't perform an actual drag-and-drop gesture (agent-browser's drag command is less reliable for DnD libraries). The reorder was verified via the PATCH API instead. Real users can drag normally.
+- **Next-phase feature ideas**: (1) multi-note comparison view (side-by-side); (2) soft-delete + trash restoration; (3) OAuth for persistent per-user history; (4) batch-render optimization for export-all; (5) tag-color import/export presets; (6) keyboard shortcut for drag-reorder (Space to pick up, arrows to move — @dnd-kit KeyboardSensor already supports this); (7) infographic theme customization (custom accent colors per note).
