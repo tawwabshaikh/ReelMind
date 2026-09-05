@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { History, FileText, ImageIcon, Loader2, ExternalLink, ChevronRight, RotateCw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { History, FileText, ImageIcon, Loader2, ChevronRight, RotateCw, Search, X, Clock, Hash } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { HistoryItem, Language } from '@/lib/types'
 
@@ -37,6 +38,8 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
   const [items, setItems] = useState<HistoryItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
 
   const load = async () => {
     try {
@@ -53,6 +56,28 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
   useEffect(() => {
     load()
   }, [refreshKey])
+
+  // Collect all unique tags across items for the filter chips.
+  const allTags = useMemo(() => {
+    if (!items) return []
+    const set = new Set<string>()
+    for (const it of items) for (const t of it.tags || []) set.add(t)
+    return Array.from(set).sort().slice(0, 24)
+  }, [items])
+
+  const filtered = useMemo(() => {
+    if (!items) return []
+    const q = query.trim().toLowerCase()
+    return items.filter((it) => {
+      if (activeTag && !(it.tags || []).includes(activeTag)) return false
+      if (!q) return true
+      return (
+        it.videoName.toLowerCase().includes(q) ||
+        (it.tags || []).some((t) => t.includes(q)) ||
+        it.language.toLowerCase().includes(q)
+      )
+    })
+  }, [items, query, activeTag])
 
   const handleRow = async (id: string) => {
     setLoadingId(id)
@@ -72,11 +97,70 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
           {items && items.length > 0 && (
             <Badge variant="secondary" className="text-[10px]">{items.length}</Badge>
           )}
+          {filtered.length !== items?.length && (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+              {filtered.length} shown
+            </Badge>
+          )}
         </div>
         <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={load}>
           <RotateCw className="h-3 w-3" /> Refresh
         </Button>
       </div>
+
+      {/* Search + tag filters */}
+      {items && items.length > 0 && (
+        <div className="mb-3 space-y-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, tag, or language…"
+              className="h-8 pl-8 pr-8 text-xs"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted"
+                aria-label="Clear search"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          {allTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {allTags.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setActiveTag((cur) => (cur === t ? null : t))}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors',
+                    activeTag === t
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  <Hash className="h-2.5 w-2.5" />
+                  {t}
+                </button>
+              ))}
+              {activeTag && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTag(null)}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+                >
+                  <X className="h-2.5 w-2.5" /> Clear
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {items === null && !error && (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -87,10 +171,13 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
       {items && items.length === 0 && (
         <p className="py-8 text-center text-sm text-muted-foreground">No generations yet.</p>
       )}
+      {items && items.length > 0 && filtered.length === 0 && (
+        <p className="py-8 text-center text-sm text-muted-foreground">No matches for your filter.</p>
+      )}
 
-      {items && items.length > 0 && (
+      {filtered.length > 0 && (
         <ul className="space-y-2">
-          {items.map((it) => {
+          {filtered.map((it) => {
             const active = activeId === it.id
             const busy = loadingId === it.id
             return (
@@ -116,6 +203,16 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
                   <Badge variant="outline" className="shrink-0 text-[10px] uppercase">
                     {LANG_LABEL[it.language]}
                   </Badge>
+                  {it.wordCount != null && (
+                    <span className="hidden shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground sm:inline-flex" title="words">
+                      <FileText className="h-2.5 w-2.5" /> {it.wordCount}
+                    </span>
+                  )}
+                  {it.durationSec != null && (
+                    <span className="hidden shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground sm:inline-flex" title="duration">
+                      <Clock className="h-2.5 w-2.5" /> {Math.round(it.durationSec)}s
+                    </span>
+                  )}
                   <span className="flex shrink-0 items-center gap-1">
                     {it.hasEnglishNotes && <span className="text-[10px] font-medium text-emerald-600" title="English notes">EN✓</span>}
                     {it.hasUrduNotes && <span className="text-[10px] font-medium text-emerald-600" title="Urdu notes">UR✓</span>}

@@ -14,6 +14,9 @@ interface GenerateNotesBody {
   transcript: string
   language: Language
   videoName?: string
+  durationSec?: number | null
+  sizeBytes?: number | null
+  wordCount?: number | null
 }
 
 interface NoteVersionOutput {
@@ -53,6 +56,9 @@ export async function POST(req: NextRequest) {
           videoName: body.videoName || 'untitled',
           language,
           transcript: body.transcript,
+          durationSec: typeof body.durationSec === 'number' && Number.isFinite(body.durationSec) ? body.durationSec : null,
+          sizeBytes: typeof body.sizeBytes === 'number' && Number.isFinite(body.sizeBytes) ? Math.round(body.sizeBytes) : null,
+          wordCount: typeof body.wordCount === 'number' && Number.isFinite(body.wordCount) ? Math.round(body.wordCount) : null,
           notesEn: english ? JSON.stringify(english.structured) : null,
           notesUr: urdu ? JSON.stringify(urdu.structured) : null,
         },

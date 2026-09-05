@@ -56,6 +56,9 @@ export interface NoteDetail {
   language: Language
   createdAt: string
   transcript: string
+  durationSec: number | null
+  sizeBytes: number | null
+  wordCount: number | null
   english?: NoteVersion
   urdu?: NoteVersion
   infographicEn: InfographicFile | null
@@ -77,4 +80,8 @@ export interface HistoryItem {
   hasUrduInfographic: boolean
   infographicEnUrl: string | null
   infographicUrUrl: string | null
+  // Aggregated tags across EN+UR (deduped, lowercased) for filtering
+  tags: string[]
+  durationSec: number | null
+  wordCount: number | null
 }

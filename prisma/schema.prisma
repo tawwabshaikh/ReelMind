@@ -16,6 +16,10 @@ model Note {
   language  String
   // Raw transcript from ASR
   transcript String
+  // Source media metrics (so reloaded history shows full stats)
+  durationSec Float?
+  sizeBytes   Int?
+  wordCount   Int?
   // Structured notes (JSON string of {title, summary, keyPoints[], tags[], markdown})
   notesEn   String?
   notesUr   String?

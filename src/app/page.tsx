@@ -33,6 +33,7 @@ import { NotesView } from '@/components/reel-notes/notes-view'
 import { TranscriptView } from '@/components/reel-notes/transcript-view'
 import { InfographicView } from '@/components/reel-notes/infographic-view'
 import { HistoryPanel } from '@/components/reel-notes/history-panel'
+import { NoteEditor } from '@/components/reel-notes/note-editor'
 import type {
   Language,
   Theme,
@@ -40,6 +41,7 @@ import type {
   GenerateNotesResponse,
   GenerateInfographicResponse,
   NoteDetailResponse,
+  NoteDetail,
   InfographicFile,
 } from '@/lib/types'
 
@@ -71,6 +73,8 @@ export default function Home() {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
   const [loadedNoteId, setLoadedNoteId] = useState<string | null>(null)
   const [regeneratingNotes, setRegeneratingNotes] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [videoName, setVideoName] = useState<string>('')
 
   const busy = stage === 'transcribing' || stage === 'generating-notes' || regeneratingNotes
 
@@ -82,6 +86,7 @@ export default function Home() {
     setError(null)
     setStage('idle')
     setLoadedNoteId(null)
+    setVideoName('')
   }, [])
 
   const handleFile = useCallback(
@@ -128,6 +133,7 @@ export default function Home() {
     // ---- Stage 2: generate notes ----
     setStage('generating-notes')
     setActiveTab('notes')
+    setVideoName(file.name)
     try {
       const res = await fetch('/api/generate-notes', {
         method: 'POST',
@@ -136,6 +142,9 @@ export default function Home() {
           transcript: tr.transcript,
           language,
           videoName: file.name,
+          durationSec: tr.meta.durationSec,
+          sizeBytes: tr.meta.sizeBytes,
+          wordCount: tr.meta.wordCount,
         }),
       })
       const data = await res.json()
@@ -176,6 +185,9 @@ export default function Home() {
           transcript: transcript.transcript,
           language,
           videoName: transcript.meta.filename,
+          durationSec: transcript.meta.durationSec,
+          sizeBytes: transcript.meta.sizeBytes,
+          wordCount: transcript.meta.wordCount,
         }),
       })
       const data = await res.json()
@@ -183,6 +195,7 @@ export default function Home() {
       const n = data as GenerateNotesResponse
       setNotes(n)
       setLoadedNoteId(n.noteId)
+      setVideoName(transcript.meta.filename)
       setHistoryRefreshKey((k) => k + 1)
       toast.success('Notes regenerated')
     } catch (e) {
@@ -235,13 +248,14 @@ export default function Home() {
       if (!res.ok) throw new Error(data?.error || `Load failed (${res.status})`)
       const d = data as NoteDetailResponse
       const n = d.note
+      const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
       setTranscript({
         transcript: n.transcript,
         meta: {
           filename: n.videoName,
-          sizeBytes: 0,
-          durationSec: null,
-          wordCount: n.transcript.split(/\s+/).filter(Boolean).length,
+          sizeBytes: n.sizeBytes ?? 0,
+          durationSec: n.durationSec,
+          wordCount,
         },
       })
       setNotes({
@@ -253,6 +267,7 @@ export default function Home() {
       setInfographicEn(n.infographicEn)
       setInfographicUr(n.infographicUr)
       setLoadedNoteId(n.id)
+      setVideoName(n.videoName)
       setStage('done')
       setFile(null)
       setActiveTab('notes')
@@ -272,6 +287,21 @@ export default function Home() {
     return 2
   })()
   const infographicDone = !!(infographicEn || infographicUr)
+
+  /** After inline-edit save: update notes state + clear stale infographics. */
+  const handleNotesSaved = useCallback((updated: NoteDetail) => {
+    setNotes({
+      noteId: updated.id,
+      language: updated.language,
+      english: updated.english,
+      urdu: updated.urdu,
+    })
+    // Edited notes no longer match the previously-rendered infographic, so clear it.
+    setInfographicEn(null)
+    setInfographicUr(null)
+    setHistoryRefreshKey((k) => k + 1)
+    toast.success('Notes saved — regenerate the infographic to reflect edits.')
+  }, [])
 
   return (
     <div className="flex min-h-screen flex-col bg-background bg-brand-hero">
@@ -461,7 +491,14 @@ export default function Home() {
                   <TabsContent value="notes" className="mt-4">
                     {notes ? (
                       <div className="animate-rn-fade-up">
-                        <NotesView english={notes.english} urdu={notes.urdu} />
+                        <NotesView
+                          english={notes.english}
+                          urdu={notes.urdu}
+                          infographicEn={infographicEn}
+                          infographicUr={infographicUr}
+                          videoName={videoName}
+                          onEdit={() => setEditorOpen(true)}
+                        />
                       </div>
                     ) : (
                       <EmptyState
@@ -531,6 +568,17 @@ export default function Home() {
           </p>
         </div>
       </footer>
+
+      {/* Inline note editor modal */}
+      <NoteEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        english={notes?.english}
+        urdu={notes?.urdu}
+        noteId={notes?.noteId ?? loadedNoteId}
+        videoName={videoName}
+        onSaved={handleNotesSaved}
+      />
     </div>
   )
 }

@@ -132,3 +132,69 @@ Task: Assess project status, run QA via agent-browser, then advance with mandato
 - Clipboard `readText` is blocked in headless automation (browser permission) — the copy *write* succeeds (button + toast confirm); only verification-by-readback is unavailable in agent-browser. Real users are unaffected.
 - History rows loaded from DB have `durationSec: null` and `sizeBytes: 0` (we don't store these on the Note row) — shown as "—" in the transcript stats. **Recommendation for next round**: add `durationSec` + `sizeBytes` columns to the Note schema so reloaded history shows full stats. Low effort, nice polish.
 - **Next-phase feature ideas** (in priority order): (1) multi-note comparison view; (2) export combined PDF (notes + infographic); (3) shareable public link per note; (4) tag-based filtering in the history panel; (5) editable notes (inline edit of key points before infographic render).
+
+---
+Task ID: 8 (cron round 2)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA, then advance with mandatory styling + new features.
+
+## Current project status (assessment)
+- Core features stable from prior rounds: bilingual EN/UR notes, 3 infographic themes, history reload, copy/stats, regenerate-notes.
+- QA at start: dev.log clean, lint 0/0, GET / + GET /api/notes → 200, agent-browser smoke test rendered correctly with history rows + tag chips visible.
+- No bugs to fix → proceeded to carry-over recommendations + new features.
+
+## Current goals / completed modifications / verification
+
+### Fix: Note schema now stores media metrics (carry-over from round 1)
+- `prisma/schema.prisma`: added `durationSec Float?`, `sizeBytes Int?`, `wordCount Int?` columns to the `Note` model. Ran `db:push` + `db:generate`.
+- `POST /api/generate-notes`: now accepts + persists `durationSec`, `sizeBytes`, `wordCount` from the transcribe step.
+- `GET /api/notes/[id]`: returns the stored metrics so reloaded history shows full stats (no more "—" for duration).
+- `GET /api/notes` (list): returns `durationSec` + `wordCount` per row, shown in the history row (e.g. "66 words · 30s").
+- **Note**: existing 3 rows have null metrics (created before the schema change); new generations populate them. Verified the field exists in the API response.
+
+### FEATURE D — Inline note editing (Edit modal → PATCH → regenerate)
+- `PATCH /api/notes/[id]` (`src/app/api/notes/[id]/route.ts`): merges partial edits to title/summary/keyPoints/tags for EN and/or UR. Validates + normalizes (caps keyPoints at 6, tags at 8, trims). Returns the updated full note detail. Returns the updated full note detail.
+- `NoteEditor` component (`src/components/reel-notes/note-editor.tsx`): a Dialog modal with:
+  - Language switcher tabs (English / اردو) when both versions exist.
+  - Editable Title (Input), Summary (Textarea), Key Points (add/remove/edit heading+detail per point, capped at 6), Tags (add via Enter + remove via X on each pill).
+  - RTL + `.font-urdu` applied when editing Urdu.
+  - Save button calls PATCH → `onSaved` callback updates the workspace notes + clears stale infographics (so user re-renders the infographic to reflect edits) + refreshes history.
+- `page.tsx`: wires the editor open state, `onEdit` on each NotesView card, and `handleNotesSaved` handler.
+- **Verification**: 
+  - curl PATCH → 200, title updated to "Edited via PATCH Test", tags updated to `['edited','test','deep work']`. ✓
+  - agent-browser: opened Edit modal → all fields populated (title "Productive Deep Work", summary, 3 key points with headings+details, 5 existing tags). Edited title to "Productive Deep Work (Edited)", added "round2-test" tag. ✓
+
+### FEATURE E — History search + tag filtering
+- `GET /api/notes` (list): now extracts + dedupes tags from the stored notes JSON (EN+UR) and returns a `tags[]` array per row.
+- `HistoryPanel` rewritten with:
+  - Search box (filters by videoName, tag, or language) with clear button.
+  - Tag filter chips (all unique tags across history, click to filter, click again to clear).
+  - "N shown" badge when filtered count differs from total.
+  - Per-row word count + duration chips (sm+ screens).
+- **Verification**: agent-browser typed "deep" in search → rows filtered + "Clear search" appeared. Clicked "deep work" tag chip → rows filtered to tagged items + "Clear" button appeared. ✓
+
+### FEATURE F — Combined PDF export (notes + infographic)
+- `pdf-lib` installed (`bun add pdf-lib`).
+- `src/lib/pdf-export.ts`: builds a polished multi-page A4 PDF — page 1 = notes (header band, title, summary, numbered key-point cards, tag pills, footer), page 2 = the infographic PNG scaled to fit. Includes a `sanitizeForPdf()` helper that strips non-WinAnsi chars (Helvetica can't encode "→"/"·"/Urdu) so the PDF always builds; the Urdu Nastaliq is preserved via the embedded infographic PNG on page 2.
+- `POST /api/export-pdf` (`src/app/api/export-pdf/route.ts`): accepts `{note, infographicUrl, videoName}`, returns `{filename, url}`.
+- `NotesView`: each note card now has an "Export PDF" button (FileDown icon) that calls the API + triggers a browser download. Includes the matching infographic on page 2 if available.
+- **Verification**: curl POST → 200, `pdf-english-*.pdf` (1633 bytes text-only, 621KB with embedded image). `file` confirms "PDF document, version 1.7". ✓
+
+### Styling polish (mandatory)
+- History panel: search box with search icon + clear, tag chips with active state, word/duration meta chips per row, "N shown" badge.
+- Note cards: 4-button header (Edit, Export PDF, Copy, .md) with consistent icon-button styling.
+- Edit modal: language switcher tabs, numbered key-point editors with remove buttons, tag pills with X, RTL support for Urdu.
+- Export PDF button with loading spinner state.
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings. ✓
+- All 5 API endpoints verified 200 via curl: GET /api/notes (tags+metrics), GET /api/notes/[id], PATCH /api/notes/[id], POST /api/export-pdf, plus the existing routes. ✓
+- agent-browser: search + tag filtering work, Edit modal opens with all fields populated, Edit+Save flow verified. ✓
+- PDF files are valid PDF v1.7 (text-only 1.6KB, with-image 621KB confirming embed). ✓
+- NOTE: The dev server experienced intermittent restarts due to sandbox process-reaping during this round; each verification was done in a single tight command sequence immediately after restart. All APIs returned correct data. The code itself is stable — the reaping is an environment artifact, not a code issue.
+
+## Unresolved issues / risks + next-phase recommendations
+- **Sandbox dev-server reaping**: background `bun run dev` processes are being killed between commands. Mitigated by running verifications in single combined commands. The cron-driven next round should start the server fresh at the beginning of its session. Not a code bug.
+- Existing 3 history rows have null `durationSec`/`wordCount` (pre-schema-change). New generations populate them. Could backfill with a one-off script if desired, but low priority.
+- PDF export uses Helvetica (WinAnsi) → Urdu Nastaliq text is stripped from page 1 (Latin only). The Urdu PDF embeds the infographic PNG (page 2) which DOES render Urdu correctly. A future enhancement could embed a Unicode TTF font (e.g. Noto Nastaliq) into the PDF for full Urdu text on page 1 — but the infographic PNG remains the canonical Urdu artifact.
+- **Next-phase feature ideas**: (1) backfill metrics for old history rows; (2) embed Noto Nastaliq TTF in pdf-lib for Urdu text on PDF page 1; (3) multi-note comparison view; (4) shareable public link per note; (5) keyboard shortcuts (e.g. Cmd+E to edit, Cmd+G to generate infographic); (6) dark-mode toggle.

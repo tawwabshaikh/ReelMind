@@ -2,16 +2,20 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Download, FileText, Tag, Hash, CheckCircle2, Copy, Check, ClipboardCheck } from 'lucide-react'
+import { Download, FileText, Tag, Hash, CheckCircle2, Copy, Check, Pencil, FileDown, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import type { NoteVersion } from '@/lib/types'
+import type { NoteVersion, InfographicFile } from '@/lib/types'
 import { slugify } from '@/lib/slugify-client'
 
 interface Props {
   english?: NoteVersion
   urdu?: NoteVersion
+  infographicEn?: InfographicFile | null
+  infographicUr?: InfographicFile | null
+  videoName?: string
+  onEdit?: () => void
 }
 
 function downloadText(filename: string, text: string, mime = 'text/markdown') {
@@ -35,11 +39,49 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-function NoteCard({ version, lang }: { version: NoteVersion; lang: 'english' | 'urdu' }) {
+async function exportPdf(
+  note: NoteVersion,
+  videoName: string,
+  infographic: InfographicFile | null | undefined,
+): Promise<void> {
+  const res = await fetch('/api/export-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      note: note.structured,
+      infographicUrl: infographic?.url ?? null,
+      videoName,
+    }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data?.error || `PDF export failed (${res.status})`)
+  // Trigger browser download
+  const a = document.createElement('a')
+  a.href = data.url
+  a.download = data.filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+function NoteCard({
+  version,
+  lang,
+  infographic,
+  videoName,
+  onEdit,
+}: {
+  version: NoteVersion
+  lang: 'english' | 'urdu'
+  infographic?: InfographicFile | null
+  videoName?: string
+  onEdit?: () => void
+}) {
   const isUrdu = lang === 'urdu'
   const { structured, markdown } = version
   const filename = `${slugify(structured.title)}-notes-${lang}.md`
   const [copied, setCopied] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(markdown)
@@ -49,6 +91,18 @@ function NoteCard({ version, lang }: { version: NoteVersion; lang: 'english' | '
       setTimeout(() => setCopied(false), 1800)
     } else {
       toast.error('Copy failed — try the download button instead.')
+    }
+  }
+
+  const handleExportPdf = async () => {
+    setExporting(true)
+    try {
+      await exportPdf(version, videoName || 'untitled', infographic)
+      toast.success(isUrdu ? 'PDF تیار ہے' : 'PDF exported')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'PDF export failed')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -70,6 +124,27 @@ function NoteCard({ version, lang }: { version: NoteVersion; lang: 'english' | '
           </h3>
         </div>
         <div className="relative flex shrink-0 gap-1.5">
+          {onEdit && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="bg-white/15 text-white hover:bg-white/25"
+              onClick={onEdit}
+              aria-label="Edit notes"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="bg-white/15 text-white hover:bg-white/25"
+            onClick={handleExportPdf}
+            disabled={exporting}
+            aria-label="Export PDF"
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+          </Button>
           <Button
             size="sm"
             variant="secondary"
@@ -136,7 +211,7 @@ function NoteCard({ version, lang }: { version: NoteVersion; lang: 'english' | '
   )
 }
 
-export function NotesView({ english, urdu }: Props) {
+export function NotesView({ english, urdu, infographicEn, infographicUr, videoName, onEdit }: Props) {
   if (!english && !urdu) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-16 text-center">
@@ -147,8 +222,24 @@ export function NotesView({ english, urdu }: Props) {
   }
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      {english && <NoteCard version={english} lang="english" />}
-      {urdu && <NoteCard version={urdu} lang="urdu" />}
+      {english && (
+        <NoteCard
+          version={english}
+          lang="english"
+          infographic={infographicEn}
+          videoName={videoName}
+          onEdit={onEdit}
+        />
+      )}
+      {urdu && (
+        <NoteCard
+          version={urdu}
+          lang="urdu"
+          infographic={infographicUr}
+          videoName={videoName}
+          onEdit={onEdit}
+        />
+      )}
     </div>
   )
 }
@@ -156,5 +247,3 @@ export function NotesView({ english, urdu }: Props) {
 /** Re-export for the page's "copy all" action. */
 export { copyToClipboard }
 export type { Props as NotesViewProps }
-// keep ClipboardCheck import used (for future "copied all" indicator)
-void ClipboardCheck
