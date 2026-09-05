@@ -268,3 +268,65 @@ Task: Assess project status, run QA, then advance with mandatory styling + new f
 - **Dark mode ThemeToggle dropdown**: the `agent-browser` snapshot couldn't capture the dropdown menu items (rendered in a Radix portal); verified dark mode via direct class manipulation instead. The dropdown works in a real browser.
 - **Share links are unauthenticated**: anyone with the `?share=<id>` URL can view the note. This is intentional for easy sharing, but if access control becomes a requirement, a signed-token or expiry-based scheme would be needed.
 - **Next-phase feature ideas**: (1) embed Noto Nastaliq TTF in pdf-lib for Urdu text on PDF page 1 (currently page 1 is Latin-only, Urdu is on the embedded infographic PNG page 2); (2) multi-note comparison view; (3) delete/archived notes; (4) export all notes as a single combined PDF/zip; (5) OAuth for persistent per-user history; (6) add a "copy share link" button to the history rows directly.
+
+---
+Task ID: 10 (cron round 4)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA, then advance with mandatory styling + new features.
+
+## Current project status (assessment)
+- Core features stable from rounds 1-3: bilingual EN/UR notes, 3 infographic themes, history reload + search + tag filtering, copy/stats, regenerate-notes, inline note editing, combined PDF export, DB metrics, backfill, shareable public links, dark mode, keyboard shortcuts.
+- QA at start: dev server down (sandbox reaping); restarted. Lint clean (0/0), GET / + GET /api/notes → 200, agent-browser smoke test rendered correctly with Select button + tag chips visible.
+- No bugs to fix → proceeded to the worklog's next-phase recommendations (delete/archive notes, copy-share-link in history rows).
+
+## Current goals / completed modifications / verification
+
+### FEATURE K — Delete notes (single + bulk) with file cleanup
+- `DELETE /api/notes/[id]` (`src/app/api/notes/[id]/route.ts`): removes a note row + best-effort cleanup of generated infographic PNGs (`infographicEn`/`infographicUr`) from `/public/generated/`. Returns 200 `{ok, id, deletedFiles}` or 404 if not found (idempotent-safe for retries).
+- `POST /api/notes/bulk-delete` (`src/app/api/notes/bulk-delete/route.ts`): accepts `{ids: string[]}`, fetches the rows, deletes their PNGs in parallel, then `db.note.deleteMany({where:{id:{in:ids}}})`. Returns `{ok, deleted, requested, deletedFiles}`.
+- **Verification (curl)**:
+  - `DELETE /api/notes/[id]` → 200 `{ok:true, deletedFiles:0}`; subsequent `GET /api/notes/[id]` → 404; count 3→2. ✓
+  - `POST /api/notes/bulk-delete` `{ids:[id1,id2]}` → 200 `{ok:true, deleted:2, requested:2, deletedFiles:4}`; count 2→0. ✓
+
+### FEATURE L — Selection mode + bulk delete UI
+- `HistoryPanel` rewritten with a "Select" toggle button in the panel header. When active:
+  - Row clicks toggle selection instead of loading the note (checkbox icon: empty Square → filled CheckSquare).
+  - Header shows "All" / "None" / "Delete" (disabled until ≥1 selected) / "Exit" buttons.
+  - A "N selected" badge appears; the footer hint switches to "Tap rows to select · X of Y visible selected".
+  - Selected rows get an emerald border + tinted bg.
+- Deleting (single via quick-action, or bulk via selection mode) opens a confirmation Dialog with a destructive-red "Delete N" button + spinner. On confirm, calls `/api/notes/bulk-delete`, shows a success toast, clears selection, exits select mode, refreshes the list, and calls `onDeleted(ids)` so the page can clear the workspace if the loaded note was among the deleted.
+- `page.tsx` `handleNotesDeleted`: if the currently-loaded note was deleted, calls `reset()` + shows an info toast "Cleared the workspace — the loaded note was deleted."
+- **Verification (agent-browser E2E)**: entered select mode → "Select all" → clicked Delete → confirmation dialog "Delete 3 notes?" appeared → confirmed "Delete 3" → all 3 notes deleted → `GET /api/notes` confirmed `remaining: 0`. No console errors. dev.log showed `DELETE FROM Note WHERE id IN (?,?,?)` + `POST /api/notes/bulk-delete 200`. ✓
+
+### FEATURE M — Copy-share-link + delete quick actions on history rows
+- Each history row now has hover-revealed quick action buttons (absolute-positioned, `opacity-0 group-hover:opacity-100`):
+  - **Share2 icon** → "Copy share link": copies `/?share=<id>` to the clipboard + toast "Share link copied for '<videoName>'". Uses `e.stopPropagation()` so it doesn't also trigger a row load.
+  - **Trash2 icon** → "Delete note": opens the single-delete confirmation dialog (same flow as bulk, but `ids:[oneId]`).
+- Only shown in non-select mode, and hidden while a row is mid-load.
+- **Verification (agent-browser)**: found both `aria-label="Copy share link"` and `aria-label="Delete note"` buttons on each row. Clicked "Copy share link" → no row load occurred (tabs stayed disabled, confirming stopPropagation worked). Clicked "Delete note" → confirmation dialog "Delete note?" opened. ✓
+
+### Styling polish (mandatory)
+- History panel header: restructured into a left group (icon + title + count badge + "N shown" + "N selected" badge) and a right group (conditional Select/All/None/Delete/Exit + Refresh).
+- Selection-mode buttons: ghost variants; Delete is destructive-red (`hover:bg-destructive/10 hover:text-destructive`).
+- Row quick actions: `bg-background/80 backdrop-blur` pills with emerald (share) + destructive (delete) hover states.
+- Delete confirmation dialog: AlertTriangle icon in destructive color, dynamic title ("Delete note?" vs "Delete N notes?"), descriptive body explaining permanent deletion of notes + PNGs.
+- Footer hint: dynamic copy based on mode (select mode shows "X of Y visible selected").
+- All new dark-mode-aware (`dark:bg-emerald-950/20`, `dark:hover:bg-emerald-950/40`).
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings. ✓
+- All API endpoints verified 200: `DELETE /api/notes/[id]`, `POST /api/notes/bulk-delete`, plus all prior routes. ✓
+- agent-browser E2E:
+  - Select mode toggles correctly; All/None/Delete buttons enable/disable appropriately. ✓
+  - Row selection toggles (Square ↔ CheckSquare) with emerald highlight. ✓
+  - Bulk delete: select-all → Delete → confirm → 3 notes deleted → `remaining: 0` (persisted in DB). ✓
+  - Quick actions exist on every row ("Copy share link" + "Delete note" aria-labels). ✓
+  - Copy share link doesn't trigger a row load (stopPropagation works). ✓
+  - Delete quick action opens the confirmation dialog. ✓
+  - No console errors throughout. ✓
+- dev.log confirmed the Prisma `DELETE FROM Note WHERE id IN (...)` query ran + `POST /api/notes/bulk-delete 200 in 52ms`. ✓
+
+## Unresolved issues / risks + next-phase recommendations
+- **Sandbox dev-server reaping** persists: the dev server dies between separate Bash commands. Mitigated by combining verifications in single commands. Not a code bug. The cron-driven next round should restart the server fresh.
+- **Delete is irreversible**: no undo/trash. A future "soft delete" with a restore window would be safer for accidental deletions. Low priority given the app's current scope.
+- **Next-phase feature ideas**: (1) embed Noto Nastaliq TTF in pdf-lib for Urdu text on PDF page 1 (still pending from round 2 — currently page 1 is Latin-only, Urdu is on the embedded infographic PNG page 2); (2) multi-note comparison view (side-by-side); (3) export-all as a single combined PDF or ZIP; (4) soft-delete + trash restoration; (5) OAuth for persistent per-user history; (6) drag-to-reorder key points in the NoteEditor; (7) custom tag colors.

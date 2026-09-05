@@ -386,6 +386,14 @@ export default function Home() {
     toast.success('Notes saved — regenerate the infographic to reflect edits.')
   }, [])
 
+  /** After delete: if the currently-loaded note was among the deleted, reset the workspace. */
+  const handleNotesDeleted = useCallback((deletedIds: string[]) => {
+    if (loadedNoteId && deletedIds.includes(loadedNoteId)) {
+      reset()
+      toast.info('Cleared the workspace — the loaded note was deleted.')
+    }
+  }, [loadedNoteId, reset])
+
   return (
     <div className="flex min-h-screen flex-col bg-background bg-brand-hero">
       {/* ---------------- Header ---------------- */}
@@ -685,7 +693,12 @@ export default function Home() {
         {/* History (hidden in shared view) */}
         {!sharedMode && (
           <div className="mt-6">
-            <HistoryPanel onLoad={loadHistoryNote} activeId={loadedNoteId} refreshKey={historyRefreshKey} />
+            <HistoryPanel
+              onLoad={loadHistoryNote}
+              activeId={loadedNoteId}
+              refreshKey={historyRefreshKey}
+              onDeleted={handleNotesDeleted}
+            />
           </div>
         )}
       </main>

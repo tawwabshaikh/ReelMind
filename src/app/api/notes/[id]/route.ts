@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { promises as fs } from 'fs'
+import path from 'path'
 import { db } from '@/lib/db'
 import { structuredNoteToMarkdown } from '@/lib/notes'
 import type { StructuredNote, NoteVersion, KeyPoint } from '@/lib/types'
@@ -168,5 +170,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch (err) {
     console.error('[/api/notes/[id]] PATCH error', err)
     return NextResponse.json({ error: 'Failed to update note' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/notes/[id] — remove a note row. Best-effort cleanup of any
+ * generated infographic PNGs from /public/generated/. Returns 200 on success
+ * (or 404 if the note didn't exist, which is idempotent-safe for retries).
+ */
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  if (!id) {
+    return NextResponse.json({ error: 'Missing note id' }, { status: 400 })
+  }
+  try {
+    const row = await db.note.findUnique({ where: { id } })
+    if (!row) {
+      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
+    }
+
+    // Best-effort file cleanup — don't fail the delete if a file is missing.
+    const filesToDelete = [row.infographicEn, row.infographicUr].filter(Boolean) as string[]
+    await Promise.all(
+      filesToDelete.map(async (fn) => {
+        try {
+          await fs.unlink(path.join(process.cwd(), 'public', 'generated', fn))
+        } catch {
+          // ignore — file may already be gone
+        }
+      }),
+    )
+
+    await db.note.delete({ where: { id } })
+    return NextResponse.json({ ok: true, id, deletedFiles: filesToDelete.length })
+  } catch (err) {
+    console.error('[/api/notes/[id]] DELETE error', err)
+    return NextResponse.json({ error: 'Failed to delete note' }, { status: 500 })
   }
 }

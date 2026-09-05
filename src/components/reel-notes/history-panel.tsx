@@ -1,10 +1,36 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { History, FileText, ImageIcon, Loader2, ChevronRight, RotateCw, Search, X, Clock, Hash } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  History,
+  FileText,
+  ImageIcon,
+  Loader2,
+  ChevronRight,
+  RotateCw,
+  Search,
+  X,
+  Clock,
+  Hash,
+  Trash2,
+  Share2,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  Loader2 as Spinner,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { HistoryItem, Language } from '@/lib/types'
 
@@ -15,6 +41,8 @@ interface Props {
   activeId?: string | null
   /** Signal a reload is needed (e.g. after a new generation) — bump to refresh. */
   refreshKey?: number
+  /** Called after a delete succeeds, with the deleted ids — so the page can clear the workspace if needed. */
+  onDeleted?: (deletedIds: string[]) => void
 }
 
 function timeAgo(iso: string): string {
@@ -34,12 +62,18 @@ const LANG_LABEL: Record<Language, string> = {
   both: 'EN+UR',
 }
 
-export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
+export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted }: Props) {
   const [items, setItems] = useState<HistoryItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [activeTag, setActiveTag] = useState<string | null>(null)
+
+  // Selection mode state
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; bulk: boolean } | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = async () => {
     try {
@@ -57,7 +91,12 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
     load()
   }, [refreshKey])
 
-  // Collect all unique tags across items for the filter chips.
+  // Exit selection mode + clear selection whenever the list reloads.
+  useEffect(() => {
+    setSelected(new Set())
+    setSelectMode(false)
+  }, [refreshKey])
+
   const allTags = useMemo(() => {
     if (!items) return []
     const set = new Set<string>()
@@ -80,6 +119,10 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
   }, [items, query, activeTag])
 
   const handleRow = async (id: string) => {
+    if (selectMode) {
+      toggleSelect(id)
+      return
+    }
     setLoadingId(id)
     try {
       await onLoad(id)
@@ -88,9 +131,61 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
     }
   }
 
+  const toggleSelect = (id: string) => {
+    setSelected((cur) => {
+      const next = new Set(cur)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllVisible = () => setSelected(new Set(filtered.map((it) => it.id)))
+  const clearSelection = () => setSelected(new Set())
+
+  const copyShareLink = async (id: string, videoName: string) => {
+    const url = `${window.location.origin}/?share=${id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success(`Share link copied for “${videoName}”`)
+    } catch {
+      toast.error('Copy failed — select the URL manually')
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const ids = deleteTarget.ids
+      const res = await fetch('/api/notes/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Delete failed')
+      toast.success(
+        ids.length === 1 ? 'Note deleted' : `${data.deleted || ids.length} notes deleted`,
+      )
+      onDeleted?.(ids)
+      setDeleteTarget(null)
+      setSelected(new Set())
+      setSelectMode(false)
+      await load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const selectedCount = selected.size
+  const visibleSelectedCount = filtered.filter((it) => selected.has(it.id)).length
+
   return (
     <div className="rounded-2xl border bg-card p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-emerald-600" />
           <h3 className="text-sm font-semibold">Recent generations</h3>
@@ -102,10 +197,57 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
               {filtered.length} shown
             </Badge>
           )}
+          {selectMode && selectedCount > 0 && (
+            <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-700">
+              {selectedCount} selected
+            </Badge>
+          )}
         </div>
-        <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={load}>
-          <RotateCw className="h-3 w-3" /> Refresh
-        </Button>
+        <div className="flex items-center gap-1.5">
+          {items && items.length > 0 && !selectMode && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 text-xs"
+              onClick={() => setSelectMode(true)}
+            >
+              <CheckSquare className="h-3 w-3" /> Select
+            </Button>
+          )}
+          {selectMode && (
+            <>
+              <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={selectAllVisible}>
+                All
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={clearSelection} disabled={selectedCount === 0}>
+                None
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => selectedCount > 0 && setDeleteTarget({ ids: Array.from(selected), bulk: true })}
+                disabled={selectedCount === 0}
+              >
+                <Trash2 className="h-3 w-3" /> Delete
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs"
+                onClick={() => {
+                  setSelectMode(false)
+                  clearSelection()
+                }}
+              >
+                <X className="h-3 w-3" /> Exit
+              </Button>
+            </>
+          )}
+          <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={load}>
+            <RotateCw className="h-3 w-3" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Search + tag filters */}
@@ -140,7 +282,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
                   className={cn(
                     'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors',
                     activeTag === t
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30'
                       : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted',
                   )}
                 >
@@ -180,26 +322,35 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
           {filtered.map((it) => {
             const active = activeId === it.id
             const busy = loadingId === it.id
+            const isSelected = selected.has(it.id)
             return (
-              <li key={it.id}>
+              <li key={it.id} className="group relative">
                 <button
                   type="button"
                   onClick={() => handleRow(it.id)}
                   disabled={busy}
                   className={cn(
-                    'group flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all',
-                    active
+                    'flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all',
+                    active && !selectMode
                       ? 'border-emerald-500/50 bg-emerald-50/70 dark:bg-emerald-950/20'
-                      : 'border-border/60 bg-muted/20 hover:border-emerald-400/40 hover:bg-muted/40',
+                      : isSelected
+                        ? 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20'
+                        : 'border-border/60 bg-muted/20 hover:border-emerald-400/40 hover:bg-muted/40',
                     busy && 'opacity-60',
                   )}
                 >
-                  {busy ? (
+                  {selectMode ? (
+                    isSelected ? (
+                      <CheckSquare className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    ) : (
+                      <Square className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )
+                  ) : busy ? (
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-600" />
                   ) : (
                     <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   )}
-                  <span className="max-w-[150px] truncate text-sm font-medium">{it.videoName}</span>
+                  <span className="max-w-[120px] truncate text-sm font-medium sm:max-w-[150px]">{it.videoName}</span>
                   <Badge variant="outline" className="shrink-0 text-[10px] uppercase">
                     {LANG_LABEL[it.language]}
                   </Badge>
@@ -228,8 +379,40 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
                     )}
                   </span>
                   <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{timeAgo(it.createdAt)}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  {!selectMode && (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  )}
                 </button>
+
+                {/* Quick actions (hover, non-select mode) */}
+                {!selectMode && !busy && (
+                  <div className="absolute right-8 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        copyShareLink(it.id, it.videoName)
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40"
+                      aria-label="Copy share link"
+                      title="Copy share link"
+                    >
+                      <Share2 className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget({ ids: [it.id], bulk: false })
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-destructive/10 hover:text-destructive"
+                      aria-label="Delete note"
+                      title="Delete note"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </li>
             )
           })}
@@ -237,9 +420,42 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0 }: Props) {
       )}
       {items && items.length > 0 && (
         <p className="mt-3 text-center text-[10px] text-muted-foreground">
-          Click any row to reload it into the workspace
+          {selectMode
+            ? `Tap rows to select · ${visibleSelectedCount} of ${filtered.length} visible selected`
+            : 'Click a row to reload · hover for quick actions'}
         </p>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              Delete {deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'}?
+            </DialogTitle>
+            <DialogDescription>
+              {deleteTarget?.bulk
+                ? `This will permanently delete ${deleteTarget.ids.length} notes and their generated infographic PNGs. This cannot be undone.`
+                : 'This will permanently delete the note and its generated infographic PNGs. This cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="gap-1.5"
+            >
+              {deleting ? <Spinner className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete {deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
