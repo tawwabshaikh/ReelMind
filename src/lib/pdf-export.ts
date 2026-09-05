@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib'
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { StructuredNote } from './types'
+import { renderNotesSheetPng } from './infographic'
 
 const OUTPUT_DIR = path.join(process.cwd(), 'public', 'generated')
 
@@ -116,13 +117,34 @@ export async function exportNotePdf(input: ExportPdfInput): Promise<string> {
 
   const { note, videoName } = input
   const isUrdu = note.language === 'urdu'
-  // Note: pdf-lib's standard fonts (Helvetica) do NOT shape Urdu Nastaliq.
-  // For the Urdu PDF we embed the infographic PNG (which DOES render Urdu
-  // correctly via Chromium) as the primary visual, and include the structured
-  // fields as best-effort latin-transliterated metadata. The notes tab + the
-  // infographic PNG remain the canonical Urdu artifacts.
 
-  // -------- Page 1: Notes --------
+  // For Urdu notes, Helvetica can't shape Nastaliq. Instead of drawing Latin
+  // text, render the notes as a clean HTML→PNG sheet via Chromium (which
+  // shapes Urdu correctly) and embed it on page 1. English keeps the drawn-text
+  // approach since Helvetica renders Latin fine.
+  if (isUrdu) {
+    try {
+      const sheetPng = await renderNotesSheetPng(note)
+      const embedded = await pdf.embedPng(sheetPng)
+      const p = pdf.addPage([PAGE_W, PAGE_H])
+      const maxW = PAGE_W - MARGIN * 2
+      const maxH = PAGE_H - MARGIN * 2
+      const scale = Math.min(maxW / embedded.width, maxH / embedded.height)
+      const drawW = embedded.width * scale
+      const drawH = embedded.height * scale
+      p.drawImage(embedded, {
+        x: (PAGE_W - drawW) / 2,
+        y: (PAGE_H - drawH) / 2,
+        width: drawW,
+        height: drawH,
+      })
+    } catch (err) {
+      console.error('[exportNotePdf] Urdu sheet render failed, falling back to infographic-only', err)
+      // Fallback: blank page 1 (the infographic on page 2 still has the Urdu content)
+      pdf.addPage([PAGE_W, PAGE_H])
+    }
+  } else {
+  // -------- Page 1: Notes (English: drawn text) --------
   let page = pdf.addPage([PAGE_W, PAGE_H])
   let y = PAGE_H - MARGIN
   const contentW = PAGE_W - MARGIN * 2
@@ -281,6 +303,7 @@ export async function exportNotePdf(input: ExportPdfInput): Promise<string> {
     font: regular,
     color: COLORS.muted,
   })
+  } // end of English drawn-text branch
 
   // -------- Page 2: Infographic (if provided) --------
   if (input.infographicUrl) {

@@ -19,6 +19,7 @@ import {
   Square,
   AlertTriangle,
   Loader2 as Spinner,
+  FileDown,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -74,6 +75,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted }: Pr
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; bulk: boolean } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [exportingAll, setExportingAll] = useState(false)
 
   const load = async () => {
     try {
@@ -180,6 +182,31 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted }: Pr
     }
   }
 
+  const exportAll = async () => {
+    setExportingAll(true)
+    try {
+      const res = await fetch('/api/export-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Export failed')
+      // Trigger browser download
+      const a = document.createElement('a')
+      a.href = data.url
+      a.download = data.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      toast.success(`Exported ${data.notes} notes (${data.pages} pages)`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Export failed')
+    } finally {
+      setExportingAll(false)
+    }
+  }
+
   const selectedCount = selected.size
   const visibleSelectedCount = filtered.filter((it) => selected.has(it.id)).length
 
@@ -205,14 +232,26 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted }: Pr
         </div>
         <div className="flex items-center gap-1.5">
           {items && items.length > 0 && !selectMode && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1 text-xs"
-              onClick={() => setSelectMode(true)}
-            >
-              <CheckSquare className="h-3 w-3" /> Select
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs"
+                onClick={exportAll}
+                disabled={exportingAll}
+              >
+                  {exportingAll ? <Spinner className="h-3 w-3 animate-spin" /> : <FileDown className="h-3 w-3" />}
+                  Export all
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs"
+                onClick={() => setSelectMode(true)}
+              >
+                <CheckSquare className="h-3 w-3" /> Select
+              </Button>
+            </>
           )}
           {selectMode && (
             <>

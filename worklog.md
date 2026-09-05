@@ -330,3 +330,46 @@ Task: Assess project status, run QA, then advance with mandatory styling + new f
 - **Sandbox dev-server reaping** persists: the dev server dies between separate Bash commands. Mitigated by combining verifications in single commands. Not a code bug. The cron-driven next round should restart the server fresh.
 - **Delete is irreversible**: no undo/trash. A future "soft delete" with a restore window would be safer for accidental deletions. Low priority given the app's current scope.
 - **Next-phase feature ideas**: (1) embed Noto Nastaliq TTF in pdf-lib for Urdu text on PDF page 1 (still pending from round 2 — currently page 1 is Latin-only, Urdu is on the embedded infographic PNG page 2); (2) multi-note comparison view (side-by-side); (3) export-all as a single combined PDF or ZIP; (4) soft-delete + trash restoration; (5) OAuth for persistent per-user history; (6) drag-to-reorder key points in the NoteEditor; (7) custom tag colors.
+
+---
+Task ID: 11 (cron round 5)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA, then advance with mandatory styling + new features.
+
+## Current project status (assessment)
+- Core features stable from rounds 1-4: bilingual EN/UR notes, 3 infographic themes, history reload + search + tag filtering, copy/stats, regenerate-notes, inline note editing, combined PDF export, DB metrics, backfill, shareable public links, dark mode, keyboard shortcuts, delete notes (single + bulk), selection mode, copy-share-link + delete quick actions.
+- QA at start: dev server down (sandbox reaping); restarted. Lint clean (0/0), GET / + GET /api/notes → 200. History was empty (deleted in round 4); generated a fresh "both" test note. agent-browser smoke test rendered correctly with Export-all + Select buttons + tag chips.
+- No bugs to fix → proceeded to the worklog's next-phase recommendations (Urdu PDF page-1 fix, export-all).
+
+## Current goals / completed modifications / verification
+
+### FEATURE N — Urdu notes on PDF page 1 (carry-over from round 2, finally resolved)
+- **Problem**: pdf-lib's Helvetica (WinAnsi) can't shape Urdu Nastaliq — the old Urdu PDF page 1 was Latin-only (Urdu stripped by `sanitizeForPdf`). The infographic PNG on page 2 had the Urdu content but page 1 was empty.
+- **Solution**: `renderNotesSheetPng(note)` in `infographic.ts` — a NEW Playwright renderer that builds a clean text-focused HTML sheet (title, summary, numbered key points, tag pills) with `dir="rtl"` + Noto Nastaliq `@font-face`, screenshots it at 2× deviceScaleFactor (fullPage so all content is captured), returns a Buffer.
+- `pdf-export.ts` `exportNotePdf()`: for Urdu notes, calls `renderNotesSheetPng()` → embeds the PNG on page 1 (scaled to fit A4 with margins); for English, keeps the existing drawn-text approach (Helvetica renders Latin fine). Fallback: if the sheet render fails, adds a blank page 1 (the infographic on page 2 still has Urdu).
+- **Verification**: curl exported an Urdu PDF → 200, `pdf-urdu-*.pdf` at **144KB** (vs the old 1.6KB Latin-only — 90× larger, confirming the Nastaliq notes-sheet PNG is embedded). Valid PDF v1.7. ✓
+
+### FEATURE O — Export-all (combined PDF of every note)
+- `POST /api/export-all` (`src/app/api/export-all/route.ts`): fetches all notes from DB, builds a single combined PDF. For each note: a cover/divider page (emerald header band, "Note N of M", title, source, language, date) when there are multiple sections, then the notes sheet (via `renderNotesSheetPng` for correct Urdu shaping), then the infographic PNG (if exists). Accepts an optional `{language}` filter ('english'/'urdu'). Returns `{filename, url, notes, pages}`.
+- `HistoryPanel`: added an "Export all" button (FileDown icon, with spinner during export) in the panel header (non-select mode, alongside "Select"). On click, calls the API + triggers a browser download + toast "Exported N notes (M pages)".
+- **Verification**:
+  - curl `POST /api/export-all` → 200, `{notes:1, pages:3}` (cover + EN sheet + UR sheet), 288KB PDF. ✓
+  - agent-browser clicked "Export all" → fresh `pdf-all-...3n06wv.pdf` (288KB) appeared in `/public/generated/`, no console errors. ✓
+
+### Styling polish (mandatory)
+- History panel header: "Export all" button with FileDown icon + loading spinner, placed before "Select" in non-select mode.
+- Notes sheet HTML: clean white-background text card with emerald accents, numbered badges, border-outlined point cards, tag pills — optimized for reading (vs the decorative infographic which is optimized for sharing).
+- Export-all cover page: emerald header band with "REEL -> NOTES" + "Note N of M" + title/source/language/date metadata.
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings. ✓
+- All API endpoints verified 200: `POST /api/export-pdf` (Urdu, 144KB), `POST /api/export-all` (288KB, 3 pages), plus all prior routes. ✓
+- agent-browser E2E: "Export all" button visible + clickable + produces a fresh PDF download. No console errors. ✓
+- Urdu PDF size jumped from 1.6KB (Latin-only) → 144KB (with Nastaliq sheet), confirming the Urdu notes are now readable on page 1. ✓
+- dev.log: no errors/exceptions. ✓
+
+## Unresolved issues / risks + next-phase recommendations
+- **Sandbox dev-server reaping** persists: dev server dies between separate Bash commands. Mitigated by combining verifications in single commands. Not a code bug.
+- **Export-all for large histories**: the combined PDF renders a notes-sheet PNG per language per note via Playwright (one Chromium launch each), which is slow for many notes (O(n) browser launches). A future optimization could batch-render all sheets in a single Chromium session, or cap the export to the N most recent notes. Low priority for the current scale.
+- **Custom tag colors** (planned this round) were not implemented — deferred to next round. Would require a `tagColors` map in the notes JSON + a color picker in the NoteEditor + themed rendering in the notes view + infographic + notes sheet.
+- **Next-phase feature ideas**: (1) custom tag colors; (2) multi-note comparison view (side-by-side); (3) soft-delete + trash restoration; (4) OAuth for persistent per-user history; (5) drag-to-reorder key points in the NoteEditor; (6) batch-render optimization for export-all; (7) per-note infographic download from the combined PDF view.
