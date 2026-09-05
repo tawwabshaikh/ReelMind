@@ -94,6 +94,7 @@ export interface HistoryItem {
   videoName: string
   language: Language
   createdAt: string
+  deletedAt: string | null
   hasEnglishNotes: boolean
   hasUrduNotes: boolean
   hasEnglishInfographic: boolean

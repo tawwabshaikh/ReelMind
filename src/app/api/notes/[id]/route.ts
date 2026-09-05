@@ -187,22 +187,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 /**
- * DELETE /api/notes/[id] — remove a note row. Best-effort cleanup of any
- * generated infographic PNGs from /public/generated/. Returns 200 on success
- * (or 404 if the note didn't exist, which is idempotent-safe for retries).
+ * DELETE /api/notes/[id] — soft-delete by default (sets deletedAt). Use
+ * `?permanent=1` to permanently remove the row + clean up its PNGs.
+ * Returns 200 on success (or 404 if the note didn't exist — idempotent-safe).
  */
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!id) {
     return NextResponse.json({ error: 'Missing note id' }, { status: 400 })
   }
   try {
+    const permanent = new URL(req.url).searchParams.get('permanent') === '1'
     const row = await db.note.findUnique({ where: { id } })
     if (!row) {
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }
 
-    // Best-effort file cleanup — don't fail the delete if a file is missing.
+    if (!permanent) {
+      // Soft-delete: mark as trashed. The row + PNGs stay so it can be restored.
+      await db.note.update({ where: { id }, data: { deletedAt: new Date() } })
+      return NextResponse.json({ ok: true, id, soft: true })
+    }
+
+    // Permanent delete: clean up PNGs, then remove the row.
     const filesToDelete = [row.infographicEn, row.infographicUr].filter(Boolean) as string[]
     await Promise.all(
       filesToDelete.map(async (fn) => {
@@ -215,9 +222,34 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     )
 
     await db.note.delete({ where: { id } })
-    return NextResponse.json({ ok: true, id, deletedFiles: filesToDelete.length })
+    return NextResponse.json({ ok: true, id, permanent: true, deletedFiles: filesToDelete.length })
   } catch (err) {
     console.error('[/api/notes/[id]] DELETE error', err)
     return NextResponse.json({ error: 'Failed to delete note' }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/notes/[id]/restore — un-delete a soft-deleted note (clears
+ * deletedAt). Reached via the trash view.
+ */
+export async function PUT(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  if (!id) {
+    return NextResponse.json({ error: 'Missing note id' }, { status: 400 })
+  }
+  try {
+    const row = await db.note.findUnique({ where: { id } })
+    if (!row) {
+      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
+    }
+    if (!row.deletedAt) {
+      return NextResponse.json({ ok: true, id, alreadyActive: true })
+    }
+    await db.note.update({ where: { id }, data: { deletedAt: null } })
+    return NextResponse.json({ ok: true, id, restored: true })
+  } catch (err) {
+    console.error('[/api/notes/[id]] PUT (restore) error', err)
+    return NextResponse.json({ error: 'Failed to restore note' }, { status: 500 })
   }
 }

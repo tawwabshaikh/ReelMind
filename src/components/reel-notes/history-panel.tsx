@@ -21,6 +21,8 @@ import {
   Loader2 as Spinner,
   FileDown,
   ArrowLeftRight,
+  Trash,
+  RotateCcw,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -76,14 +78,19 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
   // Selection mode state
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; bulk: boolean } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; bulk: boolean; permanent?: boolean } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [exportingAll, setExportingAll] = useState(false)
+
+  // Trash view toggle: when true, lists soft-deleted notes instead of active ones.
+  const [trashMode, setTrashMode] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
 
   const load = async () => {
     try {
       setError(null)
-      const res = await fetch('/api/notes')
+      const url = trashMode ? '/api/notes?trash=1' : '/api/notes'
+      const res = await fetch(url)
       if (!res.ok) throw new Error('Failed to load history')
       const data = await res.json()
       setItems(data.notes || [])
@@ -94,7 +101,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
 
   useEffect(() => {
     load()
-  }, [refreshKey])
+  }, [refreshKey, trashMode])
 
   // Exit selection mode + clear selection whenever the list reloads.
   useEffect(() => {
@@ -163,16 +170,20 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
     setDeleting(true)
     try {
       const ids = deleteTarget.ids
+      const permanent = !!deleteTarget.permanent
       const res = await fetch('/api/notes/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, permanent }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Delete failed')
-      toast.success(
-        ids.length === 1 ? 'Note deleted' : `${data.deleted || ids.length} notes deleted`,
-      )
+      const count = data.deleted ?? data.trashed ?? ids.length
+      if (permanent) {
+        toast.success(ids.length === 1 ? 'Note permanently deleted' : `${count} notes permanently deleted`)
+      } else {
+        toast.success(ids.length === 1 ? 'Note moved to trash' : `${count} notes moved to trash`)
+      }
       onDeleted?.(ids)
       setDeleteTarget(null)
       setSelected(new Set())
@@ -182,6 +193,21 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
       toast.error(e instanceof Error ? e.message : 'Delete failed')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const restoreNote = async (id: string, videoName: string) => {
+    setRestoringId(id)
+    try {
+      const res = await fetch(`/api/notes/${id}`, { method: 'PUT' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Restore failed')
+      toast.success(`Restored “${videoName}”`)
+      await load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Restore failed')
+    } finally {
+      setRestoringId(null)
     }
   }
 
@@ -217,8 +243,12 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
     <div className="rounded-2xl border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-emerald-600" />
-          <h3 className="text-sm font-semibold">Recent generations</h3>
+          {trashMode ? (
+            <Trash className="h-4 w-4 text-amber-600" />
+          ) : (
+            <History className="h-4 w-4 text-emerald-600" />
+          )}
+          <h3 className="text-sm font-semibold">{trashMode ? 'Trash' : 'Recent generations'}</h3>
           {items && items.length > 0 && (
             <Badge variant="secondary" className="text-[10px]">{items.length}</Badge>
           )}
@@ -268,10 +298,10 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => selectedCount > 0 && setDeleteTarget({ ids: Array.from(selected), bulk: true })}
+                onClick={() => selectedCount > 0 && setDeleteTarget({ ids: Array.from(selected), bulk: true, permanent: trashMode })}
                 disabled={selectedCount === 0}
               >
-                <Trash2 className="h-3 w-3" /> Delete
+                <Trash2 className="h-3 w-3" /> {trashMode ? 'Delete' : 'Trash'}
               </Button>
               {onCompare && (
                 <Button
@@ -301,6 +331,16 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
               </Button>
             </>
           )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className={`h-7 gap-1 text-xs ${trashMode ? 'text-amber-700 hover:bg-amber-500/10' : 'text-muted-foreground'}`}
+            onClick={() => setTrashMode((v) => !v)}
+            title={trashMode ? 'Back to active notes' : 'View trash'}
+          >
+            {trashMode ? <History className="h-3 w-3" /> : <Trash className="h-3 w-3" />}
+            {trashMode ? 'Active' : 'Trash'}
+          </Button>
           <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={load}>
             <RotateCw className="h-3 w-3" /> Refresh
           </Button>
@@ -444,30 +484,62 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
                 {/* Quick actions (hover, non-select mode) */}
                 {!selectMode && !busy && (
                   <div className="absolute right-8 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        copyShareLink(it.id, it.videoName)
-                      }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40"
-                      aria-label="Copy share link"
-                      title="Copy share link"
-                    >
-                      <Share2 className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setDeleteTarget({ ids: [it.id], bulk: false })
-                      }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-destructive/10 hover:text-destructive"
-                      aria-label="Delete note"
-                      title="Delete note"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    {trashMode ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            restoreNote(it.id, it.videoName)
+                          }}
+                          disabled={restoringId === it.id}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40"
+                          aria-label="Restore note"
+                          title="Restore note"
+                        >
+                          {restoringId === it.id ? <Spinner className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteTarget({ ids: [it.id], bulk: false, permanent: true })
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-destructive/10 hover:text-destructive"
+                          aria-label="Delete permanently"
+                          title="Delete permanently"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            copyShareLink(it.id, it.videoName)
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40"
+                          aria-label="Copy share link"
+                          title="Copy share link"
+                        >
+                          <Share2 className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteTarget({ ids: [it.id], bulk: false })
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:bg-destructive/10 hover:text-destructive"
+                          aria-label="Delete note"
+                          title="Move to trash"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </li>
@@ -488,13 +560,15 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-              Delete {deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'}?
+              <AlertTriangle className={`h-4 w-4 ${deleteTarget?.permanent ? 'text-destructive' : 'text-amber-600'}`} />
+              {deleteTarget?.permanent
+                ? `Permanently delete ${deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'}?`
+                : `Move ${deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'} to trash?`}
             </DialogTitle>
             <DialogDescription>
-              {deleteTarget?.bulk
-                ? `This will permanently delete ${deleteTarget.ids.length} notes and their generated infographic PNGs. This cannot be undone.`
-                : 'This will permanently delete the note and its generated infographic PNGs. This cannot be undone.'}
+              {deleteTarget?.permanent
+                ? `This will permanently remove ${deleteTarget?.bulk ? 'these notes' : 'this note'} and their generated infographic PNGs. This cannot be undone.`
+                : `The note(s) will be moved to trash. You can restore them from the Trash view, or permanently delete them later.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -502,13 +576,15 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant={deleteTarget?.permanent ? 'destructive' : 'default'}
               onClick={confirmDelete}
               disabled={deleting}
               className="gap-1.5"
             >
-              {deleting ? <Spinner className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              Delete {deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}
+              {deleting ? <Spinner className="h-4 w-4 animate-spin" /> : deleteTarget?.permanent ? <Trash2 className="h-4 w-4" /> : <Trash className="h-4 w-4" />}
+              {deleteTarget?.permanent
+                ? `Delete ${deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}`
+                : `Move to trash ${deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>

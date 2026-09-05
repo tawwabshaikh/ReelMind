@@ -7,26 +7,43 @@ export const runtime = 'nodejs'
 
 interface Body {
   ids?: string[]
+  /** When true, permanently remove the rows + clean up PNGs. Default: soft-delete (set deletedAt). */
+  permanent?: boolean
 }
 
 /**
- * POST /api/notes/bulk-delete — delete multiple notes in one shot. Best-effort
- * cleanup of generated infographic PNGs. Returns counts of deleted rows + files.
+ * POST /api/notes/bulk-delete — delete multiple notes. By default soft-deletes
+ * (sets deletedAt so they go to the trash and can be restored). Pass
+ * `{permanent: true}` to permanently remove rows + clean up PNGs. Returns counts.
  */
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Body
+    const permanent = !!body?.permanent
     const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string' && x.trim()) : []
     if (ids.length === 0) {
       return NextResponse.json({ error: 'Provide a non-empty "ids" array.' }, { status: 400 })
     }
 
+    if (!permanent) {
+      // Soft-delete: mark as trashed.
+      const result = await db.note.updateMany({
+        where: { id: { in: ids }, deletedAt: null },
+        data: { deletedAt: new Date() },
+      })
+      return NextResponse.json({
+        ok: true,
+        soft: true,
+        trashed: result.count,
+        requested: ids.length,
+      })
+    }
+
+    // Permanent delete: fetch files, clean up PNGs, then remove rows.
     const rows = await db.note.findMany({
       where: { id: { in: ids } },
       select: { id: true, infographicEn: true, infographicUr: true },
     })
-
-    // Best-effort file cleanup
     const files: string[] = []
     for (const r of rows) {
       if (r.infographicEn) files.push(r.infographicEn)
@@ -45,6 +62,7 @@ export async function POST(req: NextRequest) {
     const result = await db.note.deleteMany({ where: { id: { in: ids } } })
     return NextResponse.json({
       ok: true,
+      permanent: true,
       deleted: result.count,
       requested: ids.length,
       deletedFiles: files.length,

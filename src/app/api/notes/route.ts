@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { StructuredNote } from '@/lib/types'
 
@@ -19,13 +19,17 @@ function extractTags(json: string | null): string[] {
 }
 
 /**
- * GET /api/notes — list recent note-generation runs (metadata only),
- * with aggregated tags + media metrics for filtering/search in the history panel.
+ * GET /api/notes — list note-generation runs (metadata only), with aggregated
+ * tags + media metrics for filtering/search in the history panel.
+ * By default lists only active (non-trashed) notes. Pass `?trash=1` to list
+ * only trashed notes (for the Trash view).
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const showTrash = new URL(req.url).searchParams.get('trash') === '1'
     const rows = await db.note.findMany({
-      orderBy: { createdAt: 'desc' },
+      where: showTrash ? { deletedAt: { not: null } } : { deletedAt: null },
+      orderBy: showTrash ? { deletedAt: 'desc' } : { createdAt: 'desc' },
       take: 50,
       select: {
         id: true,
@@ -38,6 +42,7 @@ export async function GET() {
         durationSec: true,
         wordCount: true,
         createdAt: true,
+        deletedAt: true,
       },
     })
     const normalised = rows.map((r) => {
@@ -49,6 +54,7 @@ export async function GET() {
         videoName: r.videoName,
         language: r.language,
         createdAt: r.createdAt,
+        deletedAt: r.deletedAt,
         hasEnglishNotes: !!r.notesEn,
         hasUrduNotes: !!r.notesUr,
         hasEnglishInfographic: !!r.infographicEn,

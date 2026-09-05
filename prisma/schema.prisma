@@ -27,6 +27,10 @@ model Note {
   infographicEn String?
   infographicUr String?
   createdAt DateTime @default(now())
+  // Soft-delete: when set, the note is in the trash (excluded from the default
+  // history list) but can be restored or permanently deleted.
+  deletedAt DateTime?
 
   @@index([createdAt])
+  @@index([deletedAt])
 }
