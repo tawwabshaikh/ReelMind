@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Loader2 as Spinner,
   FileDown,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,6 +45,8 @@ interface Props {
   refreshKey?: number
   /** Called after a delete succeeds, with the deleted ids — so the page can clear the workspace if needed. */
   onDeleted?: (deletedIds: string[]) => void
+  /** Called when the user wants to compare exactly 2 notes (ids). */
+  onCompare?: (aId: string, bId: string) => void
 }
 
 function timeAgo(iso: string): string {
@@ -63,7 +66,7 @@ const LANG_LABEL: Record<Language, string> = {
   both: 'EN+UR',
 }
 
-export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted }: Props) {
+export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCompare }: Props) {
   const [items, setItems] = useState<HistoryItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -270,6 +273,21 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted }: Pr
               >
                 <Trash2 className="h-3 w-3" /> Delete
               </Button>
+              {onCompare && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1 text-xs text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-700"
+                  onClick={() => {
+                    const ids = Array.from(selected)
+                    if (ids.length === 2) onCompare(ids[0], ids[1])
+                  }}
+                  disabled={selectedCount !== 2}
+                  title={selectedCount === 2 ? 'Compare these 2 notes' : 'Select exactly 2 notes to compare'}
+                >
+                  <ArrowLeftRight className="h-3 w-3" /> Compare
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"

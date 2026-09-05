@@ -471,3 +471,46 @@ Task: Assess project status, run QA, then advance with mandatory styling + new f
 - **Multi-note comparison view** (deferred from round 6) still not implemented — it's a larger feature requiring a new UI surface. Remains the top next-phase recommendation.
 - **Drag in agent-browser**: the automated browser test verified drag handles exist + are clickable, but didn't perform an actual drag-and-drop gesture (agent-browser's drag command is less reliable for DnD libraries). The reorder was verified via the PATCH API instead. Real users can drag normally.
 - **Next-phase feature ideas**: (1) multi-note comparison view (side-by-side); (2) soft-delete + trash restoration; (3) OAuth for persistent per-user history; (4) batch-render optimization for export-all; (5) tag-color import/export presets; (6) keyboard shortcut for drag-reorder (Space to pick up, arrows to move — @dnd-kit KeyboardSensor already supports this); (7) infographic theme customization (custom accent colors per note).
+
+---
+Task ID: 14 (cron round 8)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA, then advance with mandatory styling + new features.
+
+## Current project status (assessment)
+- Core features stable from rounds 1-7: bilingual EN/UR notes, 3 infographic themes, history reload + search + tag filtering, copy/stats, regenerate-notes, inline note editing, drag-to-reorder key points, combined PDF export, Urdu PDF page-1 (notes sheet), export-all, DB metrics, backfill, shareable public links, dark mode, keyboard shortcuts, delete notes (single + bulk), selection mode, copy-share-link + delete quick actions, custom tag colors (notes view + editor + infographic + sheet).
+- QA at start: dev server down (sandbox reaping); restarted. Lint clean (0/0), GET / + GET /api/notes → 200, 1 note in history. Generated a 2nd test note ("Pomodoro Technique Overview") so there are 2 notes for comparison. agent-browser smoke test rendered correctly.
+- No bugs to fix → proceeded to the worklog's top next-phase recommendation (multi-note comparison view — deferred since round 6).
+
+## Current goals / completed modifications / verification
+
+### FEATURE S — Multi-note comparison view (side-by-side)
+- **Backend**: `GET /api/notes/compare?a=<id>&b=<id>` (`src/app/api/notes/compare/route.ts`) — fetches both notes in parallel, returns their full detail (structured + markdown + infographic refs + metrics). Validates that both ids exist + aren't the same.
+- **Shared types** (`src/lib/types.ts`): added `CompareNote` + `CompareResponse` interfaces.
+- **CompareDialog** (`src/components/reel-notes/compare-dialog.tsx`): a wide (max-w-6xl) modal that:
+  - Fetches `/api/notes/compare` on open (when both ids present), shows a spinner while loading.
+  - Renders two `NoteColumn`s side-by-side: Note A (emerald header) + Note B (amber header). Each column shows the video name, title, language badge, word/duration stats, summary, numbered key points (color-coded per side), tag badges (with custom/palette colors), and infographic thumbnails.
+  - Computes + displays the **shared tags** intersection in a bottom bar (tags present in both notes) — useful for seeing topic overlap.
+  - RTL + `.font-urdu` support for Urdu notes.
+- **HistoryPanel**: added a "Compare" button (ArrowLeftRight icon) in selection mode, enabled only when exactly 2 notes are selected (tooltip explains the constraint). Calls `onCompare(aId, bId)`.
+- **page.tsx**: wires `compareOpen` + `compareIds` state, passes `onCompare` to HistoryPanel, renders `<CompareDialog>`.
+- **Verification**:
+  - curl `GET /api/notes/compare?a=…&b=…` → 200; returned both notes (A: "Pomodoro Technique Overview", B: "Productive Deep Work") + correctly computed shared tags: `['productivity', 'focus', 'time management']`. ✓
+  - agent-browser E2E: entered select mode → "Select all" (2 notes) → Compare button enabled (`disabled=false`) → clicked → dialog opened showing both notes side-by-side: Note A (Pomodoro) with summary + key points + tags, Note B (Productive Deep Work) with "Track Deep Work Hours", "Schedule Uninterrupted Time" points, + shared "time management" tag. No console errors. ✓
+
+### Styling polish (mandatory)
+- Compare dialog: max-w-6xl wide layout, two color-coded columns (emerald A / amber B), per-side numbered badges, scrollable body with custom scrollbar, shared-tags bar at the bottom.
+- Compare button: emerald-tinted ghost variant in selection mode, with helpful tooltip ("Select exactly 2 notes to compare").
+- NoteColumn headers: gradient bg (emerald/amber), side letter badge (A/B), video name + language + stats.
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings. ✓
+- All API endpoints verified 200: `GET /api/notes/compare`, plus all prior routes. ✓
+- agent-browser E2E: select mode → select 2 → Compare → dialog renders both notes with titles, summaries, key points, tags, + shared-tags bar. No console errors. ✓
+- dev.log: no errors/exceptions. ✓
+
+## Unresolved issues / risks + next-phase recommendations
+- **Sandbox dev-server reaping** persists: dev server dies between separate Bash commands. Mitigated by combining verifications in single commands. Not a code bug.
+- **Soft-delete + trash restoration** (planned this round) was not implemented — it requires a schema change (`deletedAt` column) + a new "Trash" filter view + restore endpoint. Deferred to next round. The current hard-delete (round 4) remains functional.
+- **Comparison only supports 2 notes**: the UI enforces exactly-2 selection. A future enhancement could support 3-way comparison or a stacked diff view for more notes. Low priority.
+- **Next-phase feature ideas**: (1) soft-delete + trash restoration (schema change + Trash filter + restore endpoint); (2) batch-render optimization for export-all (single Chromium session); (3) OAuth for persistent per-user history; (4) tag-color import/export presets; (5) infographic theme customization (custom accent colors per note); (6) 3-way comparison; (7) diff view (highlight added/removed/changed key points between 2 notes).

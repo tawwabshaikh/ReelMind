@@ -38,6 +38,7 @@ import { TranscriptView } from '@/components/reel-notes/transcript-view'
 import { InfographicView } from '@/components/reel-notes/infographic-view'
 import { HistoryPanel } from '@/components/reel-notes/history-panel'
 import { NoteEditor } from '@/components/reel-notes/note-editor'
+import { CompareDialog } from '@/components/reel-notes/compare-dialog'
 import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
 import { ShareButton } from '@/components/reel-notes/share-button'
 import type {
@@ -83,6 +84,8 @@ export default function Home() {
   const [videoName, setVideoName] = useState<string>('')
   const [sharedMode, setSharedMode] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [compareIds, setCompareIds] = useState<{ a: string | null; b: string | null }>({ a: null, b: null })
 
   const busy = stage === 'transcribing' || stage === 'generating-notes' || regeneratingNotes
 
@@ -698,6 +701,10 @@ export default function Home() {
               activeId={loadedNoteId}
               refreshKey={historyRefreshKey}
               onDeleted={handleNotesDeleted}
+              onCompare={(aId, bId) => {
+                setCompareIds({ a: aId, b: bId })
+                setCompareOpen(true)
+              }}
             />
           </div>
         )}
@@ -725,6 +732,14 @@ export default function Home() {
         noteId={notes?.noteId ?? loadedNoteId}
         videoName={videoName}
         onSaved={handleNotesSaved}
+      />
+
+      {/* Multi-note comparison dialog */}
+      <CompareDialog
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        aId={compareIds.a}
+        bId={compareIds.b}
       />
 
       {/* Keyboard shortcuts dialog */}

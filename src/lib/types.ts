@@ -71,6 +71,24 @@ export interface NoteDetailResponse {
   note: NoteDetail
 }
 
+export interface CompareNote {
+  id: string
+  videoName: string
+  language: Language
+  createdAt: string
+  durationSec: number | null
+  wordCount: number | null
+  english?: NoteVersion
+  urdu?: NoteVersion
+  infographicEn: InfographicFile | null
+  infographicUr: InfographicFile | null
+}
+
+export interface CompareResponse {
+  a: CompareNote
+  b: CompareNote
+}
+
 export interface HistoryItem {
   id: string
   videoName: string
