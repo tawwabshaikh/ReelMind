@@ -3,16 +3,17 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import os from 'os'
 import ZAI from 'z-ai-web-dev-sdk'
-import { extractAudio, fileToBase64, cleanupDir, probeDuration } from '@/lib/audio'
+import { extractAudio, fileToBase64, cleanupDir, probeDuration, chunkAudio } from '@/lib/audio'
 
 export const runtime = 'nodejs'
-// Video upload + ffmpeg + ASR can take a while.
+// Video upload + ffmpeg + ASR can take a while (especially multi-chunk).
 export const maxDuration = 300
 
 const MAX_BYTES = 120 * 1024 * 1024 // 120 MB upload cap
 
 export async function POST(req: NextRequest) {
   let tmpDir: string | null = null
+  let chunkDir: string | null = null
   try {
     const form = await req.formData()
     const file = form.get('video')
@@ -39,11 +40,27 @@ export async function POST(req: NextRequest) {
     const audioPath = await extractAudio(videoPath)
 
     try {
-      // 2) Transcribe via ASR
-      const base64 = await fileToBase64(audioPath)
+      // 2) Chunk into ≤28s segments (the ASR API has a 30s limit per request).
+      //    Short audio skips chunking entirely.
+      const { dir: cDir, segments } = await chunkAudio(audioPath, duration)
+      chunkDir = cDir
+
       const zai = await ZAI.create()
-      const resp = await zai.audio.asr.create({ file_base64: base64 })
-      const transcript = (resp.text || '').trim()
+      const parts: string[] = []
+
+      // 3) Transcribe each segment sequentially and concatenate.
+      //    (Sequential to avoid rate limits; each chunk is fast.)
+      for (let i = 0; i < segments.length; i++) {
+        const segPath = segments[i]
+        const base64 = await fileToBase64(segPath)
+        const resp = await zai.audio.asr.create({ file_base64: base64 })
+        const text = (resp.text || '').trim()
+        if (text) {
+          parts.push(text)
+        }
+      }
+
+      const transcript = parts.join(' ').replace(/\s+/g, ' ').trim()
 
       if (!transcript) {
         return NextResponse.json({ error: 'Transcription returned empty text. The video may have no audible speech.' }, { status: 422 })
@@ -56,10 +73,12 @@ export async function POST(req: NextRequest) {
           sizeBytes: file.size,
           durationSec: duration,
           wordCount: transcript.split(/\s+/).filter(Boolean).length,
+          segments: segments.length,
         },
       })
     } finally {
       await cleanupDir(path.dirname(audioPath)).catch(() => {})
+      if (chunkDir) await cleanupDir(chunkDir).catch(() => {})
     }
   } catch (err) {
     console.error('[/api/transcribe] error', err)

@@ -49,6 +49,70 @@ export async function extractAudio(videoPath: string): Promise<string> {
   return audioPath
 }
 
+/** Max duration (seconds) the ASR API accepts per request. We chunk with margin. */
+const ASR_MAX_SEGMENT_SEC = 28
+
+/**
+ * Split an audio file into ≤28-second WAV segments using ffmpeg's segment
+ * muxer. Returns the directory containing the segments + the list of segment
+ * file paths (sorted). The caller owns cleanup of the directory.
+ *
+ * If the audio is shorter than ASR_MAX_SEGMENT_SEC, returns a single-element
+ * list containing the original audio path (no chunking needed).
+ */
+export async function chunkAudio(audioPath: string, durationSec: number | null): Promise<{ dir: string; segments: string[] }> {
+  const dir = path.dirname(audioPath)
+
+  // Short audio — no chunking needed.
+  if (durationSec != null && durationSec <= ASR_MAX_SEGMENT_SEC) {
+    return { dir, segments: [audioPath] }
+  }
+
+  const segDir = await fs.mkdtemp(path.join(os.tmpdir(), 'reel-chunks-'))
+  const pattern = path.join(segDir, 'chunk-%03d.wav')
+
+  await new Promise<void>((resolve, reject) => {
+    // -f segment  segment muxer
+    // -segment_time 28  split every 28s (under the 30s ASR limit)
+    // -c copy  no re-encode (WAV PCM splits cleanly at sample boundaries)
+    const ffmpeg = spawn('ffmpeg', [
+      '-y',
+      '-i', audioPath,
+      '-f', 'segment',
+      '-segment_time', String(ASR_MAX_SEGMENT_SEC),
+      '-c', 'copy',
+      pattern,
+    ])
+
+    let stderr = ''
+    ffmpeg.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+    ffmpeg.on('error', (err) => reject(new Error(`ffmpeg segment failed to start: ${err.message}`)))
+    ffmpeg.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`ffmpeg segment exited with code ${code}. ${stderr.slice(-500)}`))
+      } else {
+        resolve()
+      }
+    })
+  })
+
+  // List + sort the generated chunks (chunk-000.wav, chunk-001.wav, …)
+  const files = await fs.readdir(segDir)
+  const segments = files
+    .filter((f) => f.startsWith('chunk-') && f.endsWith('.wav'))
+    .sort()
+    .map((f) => path.join(segDir, f))
+
+  if (segments.length === 0) {
+    // Fallback: if chunking produced nothing, use the original.
+    return { dir, segments: [audioPath] }
+  }
+
+  return { dir: segDir, segments }
+}
+
 /**
  * Probe basic media metadata (duration in seconds) using ffprobe.
  * Returns null if probing fails (non-fatal).

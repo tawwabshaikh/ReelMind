@@ -620,3 +620,32 @@ Task: Assess project status, run QA, then advance with mandatory styling + new f
 - **Auto-purge old trash**: trashed notes persist indefinitely until manually emptied or restored. A future cron/scheduled task could auto-purge trash older than N days. Low priority.
 - **Diff only covers key points**: the diff view compares key points by heading. A future enhancement could also diff the summary text, tags (added/removed tags), or the full transcript. Medium priority.
 - **Next-phase feature ideas**: (1) auto-purge trash older than N days (cron task); (2) diff summary text + tags (not just key points); (3) batch-render optimization for export-all (single Chromium session); (4) OAuth for persistent per-user history; (5) tag-color import/export presets; (6) infographic theme customization (custom accent colors per note); (7) 3-way comparison; (8) export diff view as PDF.
+
+---
+Task ID: 17 (bugfix — ASR 30s limit)
+Agent: main (Z.ai Code)
+Task: Fix the "transcriptions文件时长限制为0-30秒" (ASR 30-second duration limit) error that occurred when transcribing videos longer than 30 seconds.
+
+## Problem
+The z-ai ASR API rejects audio files longer than 30 seconds with HTTP 400: `{"error":{"code":"1214","message":"transcriptions文件时长限制为0-30秒"}}`. The original `/api/transcribe` route extracted the full audio and sent it as a single base64 blob — any video > 30s failed.
+
+## Fix
+- **`src/lib/audio.ts`**: added `chunkAudio(audioPath, durationSec)` — uses ffmpeg's `-f segment -segment_time 28` muxer to split the audio into ≤28-second WAV segments (28s to stay safely under the 30s API limit). WAV PCM splits cleanly at sample boundaries (no keyframe issues). Short audio (≤28s) skips chunking entirely and returns the original path.
+- **`src/app/api/transcribe/route.ts`**: updated the pipeline to:
+  1. Extract audio (as before)
+  2. **Chunk** into ≤28s segments via `chunkAudio()`
+  3. Transcribe each segment **sequentially** via `zai.audio.asr.create()` (sequential to avoid rate limits)
+  4. **Concatenate** the segment transcripts with spaces, normalize whitespace
+  5. Return `{transcript, meta: {..., segments: N}}` (includes the segment count for transparency)
+  6. Cleanup both the audio dir and the chunk dir
+
+## Verification
+- Created a 62s test video (`tests/fixtures/long-video.mp4`, 869KB) with ~150 words of TTS speech about deep work.
+- curl `POST /api/transcribe` with the 62s video → **HTTP 200** (previously 400), transcript 974 chars / 150 words, **3 segments** (62s / 28s = 3), full speech captured start-to-end. ✓
+- Regression test: original 30s video → HTTP 200, 65 words, 2 segments (28s + 2s). No regression. ✓
+- `bun run lint` → 0/0. ✓
+- dev.log: no errors. ✓
+
+## Impact
+- Videos of any duration (up to the 120MB upload cap) can now be transcribed. A 5-minute video → ~11 segments → 11 ASR calls. The `maxDuration: 300` route timeout accommodates this.
+- The `segments` count in the response meta lets the UI show how many chunks were processed (currently not displayed in the UI, but available for future use).
