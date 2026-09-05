@@ -565,3 +565,58 @@ Task: Assess project status, run QA, then advance with mandatory styling + new f
 - **Diff view in CompareDialog** (planned this round) was not implemented — highlighting added/removed/changed key points between the 2 compared notes. Deferred to next round; the current comparison shows both notes side-by-side with shared-tags, which is the more valuable baseline.
 - **Auto-purge old trash**: trashed notes persist indefinitely until permanently deleted or restored. A future enhancement could auto-purge trash older than N days via a cron/scheduled task. Low priority for the current scale.
 - **Next-phase feature ideas**: (1) diff view in CompareDialog (highlight added/removed/changed key points); (2) auto-purge trash older than N days; (3) batch-render optimization for export-all (single Chromium session); (4) OAuth for persistent per-user history; (5) tag-color import/export presets; (6) infographic theme customization (custom accent colors per note); (7) 3-way comparison; (8) empty-trash button in the Trash view.
+
+---
+Task ID: 16 (cron round 10)
+Agent: main (Z.ai Code) — 15-min recurring QA & enhancement
+Task: Assess project status, run QA, then advance with mandatory styling + new features.
+
+## Current project status (assessment)
+- Core features stable from rounds 1-9: bilingual EN/UR notes, 3 infographic themes, history reload + search + tag filtering, copy/stats, regenerate-notes, inline note editing, drag-to-reorder key points, combined PDF export, Urdu PDF page-1 (notes sheet), export-all, DB metrics, backfill, shareable public links, dark mode, keyboard shortcuts, delete notes (single + bulk), selection mode, copy-share-link + delete quick actions, custom tag colors (notes view + editor + infographic + sheet), multi-note comparison view, soft-delete + trash restoration.
+- QA at start: dev server down (sandbox reaping); restarted. Lint clean (0/0), GET / + GET /api/notes → 200, 4 notes in history. agent-browser smoke test rendered correctly.
+- No bugs to fix → proceeded to the worklog's top next-phase recommendations (diff view in CompareDialog + empty-trash button).
+
+## Current goals / completed modifications / verification
+
+### FEATURE U — Diff view in CompareDialog (highlight added/removed/changed key points)
+- **Diff utility** (`src/lib/diff.ts`): new module with:
+  - `diffKeyPoints(a, b)` — matches key points by heading (case-insensitive, trimmed), classifies each as: `added` (in B only), `removed` (in A only), `changed` (same heading, different detail), `unchanged` (same heading + detail). Returns `DiffRow[]` sorted by interest (changed > removed > added > unchanged).
+  - `summarizeDiff(rows)` — returns counts `{added, removed, changed, unchanged}`.
+  - `DiffStatus` type + `DiffRow` interface exported.
+- **CompareDialog** (`src/components/reel-notes/compare-dialog.tsx`): added a mode toggle ("Side-by-side" / "Diff") in the dialog header. When "Diff" is selected:
+  - `DiffView` component renders a **summary bar** with 4 color-coded count badges (added=emerald, removed=red, changed=amber, unchanged=muted).
+  - Below the bar, each `DiffRowCard` shows the heading + status label + detail, with color-coded backgrounds:
+    - Added (emerald bg, Plus icon, "Added in B" label) — shows B's detail.
+    - Removed (red bg, Minus icon, "Only in A" label) — shows A's detail with strikethrough.
+    - Changed (amber bg, RefreshCw icon, "Changed" label) — shows A's detail (red, strikethrough) and B's detail (emerald) side by side.
+    - Unchanged (muted bg, Equal icon, "Unchanged" label) — shows the detail normally.
+  - The dialog description swaps based on mode.
+- **Verification (agent-browser)**: selected 2 notes → Compare → dialog opened → clicked "Diff" toggle → diff view rendered with "Diff summary" bar (added/removed/changed/unchanged counts), individual rows showing "Time Blocking"→CHANGED, "Intense Focus"→ONLY IN A, "Regular Breaks"→ONLY IN A, "Progress Tracking"→ONLY IN A. No console errors. ✓
+
+### FEATURE V — Empty-trash button
+- **HistoryPanel** (`src/components/reel-notes/history-panel.tsx`): added an "Empty trash" button (Trash2 icon, destructive variant) visible only in trash mode + non-select mode + when trash has items. Clicking it sets `deleteTarget` with `emptyTrash: true` + all trashed note ids + `permanent: true`.
+- **Confirmation dialog**: updated to handle the `emptyTrash` flag — title "Empty trash? (N notes)", description "This will permanently delete all N trashed notes and their generated infographic PNGs. This cannot be undone.", button label "Empty trash" (destructive variant).
+- **confirmDelete**: updated to show a specific toast for empty-trash: "Trash emptied — N notes permanently deleted".
+- **Verification**: soft-deleted 2 notes via curl → trash count 2 → agent-browser: switched to trash mode → "Empty trash" button found and enabled (`disabled=false`). ✓
+
+### Styling polish (mandatory)
+- Diff view: 4 distinct color-coded row styles (emerald added, red removed, amber changed, muted unchanged) with matching icons (Plus, Minus, RefreshCw, Equal) and status badges.
+- Changed rows: show both A (red strikethrough) and B (emerald) details side-by-side for easy comparison.
+- Diff summary bar: 4 count badges with icons + colored borders.
+- Mode toggle: segmented control style (Side-by-side / Diff) with active-state shadow.
+- Empty-trash button: destructive ghost variant, only visible in trash mode with items.
+- Confirmation dialog: dynamic title/description/button for empty-trash vs permanent vs soft.
+
+### Verification summary
+- `bun run lint` → 0 errors, 0 warnings. ✓
+- All API endpoints verified 200: `GET /api/notes/compare` (returns both notes for diff), `POST /api/notes/bulk-delete` (soft + permanent), plus all prior routes. ✓
+- agent-browser E2E:
+  - Diff view: selected 2 notes → Compare → Diff toggle → summary bar + diff rows with correct status labels (CHANGED, ONLY IN A, ADDED IN B). No console errors. ✓
+  - Empty-trash: soft-deleted 2 notes → trash mode → "Empty trash" button found + enabled. ✓
+- dev.log: no errors/exceptions. ✓
+
+## Unresolved issues / risks + next-phase recommendations
+- **Sandbox dev-server reaping** persists: dev server dies between separate Bash commands. Mitigated by combining verifications in single commands. Not a code bug.
+- **Auto-purge old trash**: trashed notes persist indefinitely until manually emptied or restored. A future cron/scheduled task could auto-purge trash older than N days. Low priority.
+- **Diff only covers key points**: the diff view compares key points by heading. A future enhancement could also diff the summary text, tags (added/removed tags), or the full transcript. Medium priority.
+- **Next-phase feature ideas**: (1) auto-purge trash older than N days (cron task); (2) diff summary text + tags (not just key points); (3) batch-render optimization for export-all (single Chromium session); (4) OAuth for persistent per-user history; (5) tag-color import/export presets; (6) infographic theme customization (custom accent colors per note); (7) 3-way comparison; (8) export diff view as PDF.

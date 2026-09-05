@@ -78,7 +78,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
   // Selection mode state
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; bulk: boolean; permanent?: boolean } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; bulk: boolean; permanent?: boolean; emptyTrash?: boolean } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [exportingAll, setExportingAll] = useState(false)
 
@@ -179,7 +179,9 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || 'Delete failed')
       const count = data.deleted ?? data.trashed ?? ids.length
-      if (permanent) {
+      if (deleteTarget.emptyTrash) {
+        toast.success(`Trash emptied — ${count} notes permanently deleted`)
+      } else if (permanent) {
         toast.success(ids.length === 1 ? 'Note permanently deleted' : `${count} notes permanently deleted`)
       } else {
         toast.success(ids.length === 1 ? 'Note moved to trash' : `${count} notes moved to trash`)
@@ -208,6 +210,29 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
       toast.error(e instanceof Error ? e.message : 'Restore failed')
     } finally {
       setRestoringId(null)
+    }
+  }
+
+  const emptyTrash = async () => {
+    if (!items || items.length === 0) return
+    setDeleting(true)
+    try {
+      const ids = items.map((it) => it.id)
+      const res = await fetch('/api/notes/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, permanent: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Empty trash failed')
+      toast.success(`Trash emptied — ${data.deleted || ids.length} notes permanently deleted`)
+      onDeleted?.(ids)
+      setDeleteTarget(null)
+      await load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Empty trash failed')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -330,6 +355,17 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
                 <X className="h-3 w-3" /> Exit
               </Button>
             </>
+          )}
+          {trashMode && !selectMode && items && items.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setDeleteTarget({ ids: items.map((i) => i.id), bulk: true, permanent: true, emptyTrash: true })}
+              title="Permanently delete all trashed notes"
+            >
+              <Trash2 className="h-3 w-3" /> Empty trash
+            </Button>
           )}
           <Button
             size="sm"
@@ -561,14 +597,18 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className={`h-4 w-4 ${deleteTarget?.permanent ? 'text-destructive' : 'text-amber-600'}`} />
-              {deleteTarget?.permanent
-                ? `Permanently delete ${deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'}?`
-                : `Move ${deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'} to trash?`}
+              {deleteTarget?.emptyTrash
+                ? `Empty trash? (${deleteTarget.ids.length} notes)`
+                : deleteTarget?.permanent
+                  ? `Permanently delete ${deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'}?`
+                  : `Move ${deleteTarget?.bulk ? `${deleteTarget.ids.length} notes` : 'note'} to trash?`}
             </DialogTitle>
             <DialogDescription>
-              {deleteTarget?.permanent
-                ? `This will permanently remove ${deleteTarget?.bulk ? 'these notes' : 'this note'} and their generated infographic PNGs. This cannot be undone.`
-                : `The note(s) will be moved to trash. You can restore them from the Trash view, or permanently delete them later.`}
+              {deleteTarget?.emptyTrash
+                ? `This will permanently delete all ${deleteTarget.ids.length} trashed notes and their generated infographic PNGs. This cannot be undone.`
+                : deleteTarget?.permanent
+                  ? `This will permanently remove ${deleteTarget?.bulk ? 'these notes' : 'this note'} and their generated infographic PNGs. This cannot be undone.`
+                  : `The note(s) will be moved to trash. You can restore them from the Trash view, or permanently delete them later.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -582,9 +622,11 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
               className="gap-1.5"
             >
               {deleting ? <Spinner className="h-4 w-4 animate-spin" /> : deleteTarget?.permanent ? <Trash2 className="h-4 w-4" /> : <Trash className="h-4 w-4" />}
-              {deleteTarget?.permanent
-                ? `Delete ${deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}`
-                : `Move to trash ${deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}`}
+              {deleteTarget?.emptyTrash
+                ? 'Empty trash'
+                : deleteTarget?.permanent
+                  ? `Delete ${deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}`
+                  : `Move to trash ${deleteTarget?.bulk ? `${deleteTarget.ids.length}` : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>

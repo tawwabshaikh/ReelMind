@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { X, FileText, Tag, Hash, Clock, ImageIcon, ArrowLeftRight, Loader2 } from 'lucide-react'
+import { X, FileText, Tag, Hash, Clock, ImageIcon, ArrowLeftRight, Loader2, GitCompare, Plus, Minus, RefreshCw, Equal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -13,6 +13,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { colorForTag, shade } from '@/lib/tag-colors'
+import { diffKeyPoints, summarizeDiff, type DiffRow, type DiffStatus } from '@/lib/diff'
 import type { CompareResponse, CompareNote, NoteVersion } from '@/lib/types'
 
 interface Props {
@@ -46,7 +47,6 @@ function TagBadges({ tags, tagColors }: { tags: string[]; tagColors?: Record<str
 }
 
 function NoteColumn({ note, side }: { note: CompareNote; side: 'A' | 'B' }) {
-  const accent = side === 'A' ? 'emerald' : 'amber'
   const version = note.english || note.urdu
   if (!version) {
     return (
@@ -125,18 +125,10 @@ function NoteColumn({ note, side }: { note: CompareNote; side: 'A' | 'B' }) {
         {(note.infographicEn || note.infographicUr) && (
           <div className="flex gap-2 border-t pt-3">
             {note.infographicEn && (
-              <img
-                src={note.infographicEn.url}
-                alt="EN infographic"
-                className="h-20 w-auto rounded border object-cover"
-              />
+              <img src={note.infographicEn.url} alt="EN infographic" className="h-20 w-auto rounded border object-cover" />
             )}
             {note.infographicUr && (
-              <img
-                src={note.infographicUr.url}
-                alt="UR infographic"
-                className="h-20 w-auto rounded border object-cover"
-              />
+              <img src={note.infographicUr.url} alt="UR infographic" className="h-20 w-auto rounded border object-cover" />
             )}
           </div>
         )}
@@ -145,10 +137,99 @@ function NoteColumn({ note, side }: { note: CompareNote; side: 'A' | 'B' }) {
   )
 }
 
+// ---- Diff view ----
+
+const DIFF_STYLES: Record<DiffStatus, { bg: string; border: string; icon: React.ReactNode; label: string; iconColor: string }> = {
+  added: { bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-500/40', icon: <Plus className="h-3.5 w-3.5" />, label: 'Added in B', iconColor: 'text-emerald-600' },
+  removed: { bg: 'bg-red-50 dark:bg-red-950/20', border: 'border-red-500/40', icon: <Minus className="h-3.5 w-3.5" />, label: 'Only in A', iconColor: 'text-red-600' },
+  changed: { bg: 'bg-amber-50 dark:bg-amber-950/20', border: 'border-amber-500/40', icon: <RefreshCw className="h-3.5 w-3.5" />, label: 'Changed', iconColor: 'text-amber-600' },
+  unchanged: { bg: 'bg-muted/20', border: 'border-border/40', icon: <Equal className="h-3.5 w-3.5" />, label: 'Unchanged', iconColor: 'text-muted-foreground' },
+}
+
+function DiffRowCard({ row }: { row: DiffRow }) {
+  const s = DIFF_STYLES[row.status]
+  return (
+    <div className={`rounded-lg border p-3 ${s.bg} ${s.border}`}>
+      <div className="mb-1 flex items-center gap-2">
+        <span className={s.iconColor}>{s.icon}</span>
+        <span className="text-xs font-semibold">{row.heading}</span>
+        <Badge variant="outline" className={`ml-auto text-[9px] uppercase ${s.iconColor} border-current/30`}>
+          {s.label}
+        </Badge>
+      </div>
+      {row.status === 'changed' ? (
+        <div className="space-y-1.5">
+          <div className="rounded bg-red-50/50 px-2 py-1 text-[11px] text-red-900 line-through dark:bg-red-950/30 dark:text-red-200">
+            <span className="mr-1 font-bold text-red-600">A:</span>
+            {row.detailA}
+          </div>
+          <div className="rounded bg-emerald-50/50 px-2 py-1 text-[11px] text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+            <span className="mr-1 font-bold text-emerald-600">B:</span>
+            {row.detailB}
+          </div>
+        </div>
+      ) : (
+        <p className={`text-[11px] text-muted-foreground ${row.status === 'removed' ? 'line-through opacity-70' : ''}`}>
+          {row.detailA || row.detailB}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function DiffView({ data }: { data: CompareResponse }) {
+  const aVersion = data.a.english || data.a.urdu
+  const bVersion = data.b.english || data.b.urdu
+  if (!aVersion || !bVersion) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Both notes need content to diff.
+      </div>
+    )
+  }
+  const rows = diffKeyPoints(aVersion.structured.keyPoints, bVersion.structured.keyPoints)
+  const summary = summarizeDiff(rows)
+
+  return (
+    <div className="flex flex-1 flex-col gap-3 overflow-hidden">
+      {/* Summary bar */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border bg-muted/30 p-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Diff summary</span>
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="outline" className="gap-1 border-emerald-500/40 text-emerald-700">
+            <Plus className="h-3 w-3" /> {summary.added} added
+          </Badge>
+          <Badge variant="outline" className="gap-1 border-red-500/40 text-red-700">
+            <Minus className="h-3 w-3" /> {summary.removed} removed
+          </Badge>
+          <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-700">
+            <RefreshCw className="h-3 w-3" /> {summary.changed} changed
+          </Badge>
+          <Badge variant="outline" className="gap-1 text-muted-foreground">
+            <Equal className="h-3 w-3" /> {summary.unchanged} unchanged
+          </Badge>
+        </div>
+      </div>
+
+      {/* Diff rows */}
+      <div className="flex-1 space-y-2 overflow-y-auto scroll-thin">
+        {rows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No key points to diff.</p>
+        ) : (
+          rows.map((row, i) => <DiffRowCard key={i} row={row} />)
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---- Main dialog ----
+
 export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<CompareResponse | null>(null)
+  const [mode, setMode] = useState<'side-by-side' | 'diff'>('side-by-side')
 
   useEffect(() => {
     if (!open || !aId || !bId) {
@@ -158,6 +239,7 @@ export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
     }
     setLoading(true)
     setError(null)
+    setMode('side-by-side')
     ;(async () => {
       try {
         const res = await fetch(`/api/notes/compare?a=${encodeURIComponent(aId)}&b=${encodeURIComponent(bId)}`)
@@ -173,7 +255,6 @@ export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
     })()
   }, [open, aId, bId])
 
-  // Compute shared tags (intersection of both notes' EN tags)
   const sharedTags = (() => {
     if (!data) return []
     const aTags = new Set(data.a.english?.structured.tags || data.a.urdu?.structured.tags || [])
@@ -185,13 +266,41 @@ export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-hidden p-0 sm:max-w-6xl">
         <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle className="flex items-center gap-2">
-            <ArrowLeftRight className="h-4 w-4 text-emerald-600" />
-            Compare notes
-          </DialogTitle>
-          <DialogDescription>
-            Side-by-side comparison of two notes. Shared tags are highlighted below.
-          </DialogDescription>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <DialogTitle className="flex items-center gap-2">
+                <ArrowLeftRight className="h-4 w-4 text-emerald-600" />
+                Compare notes
+              </DialogTitle>
+              <DialogDescription className="mt-0.5">
+                {mode === 'side-by-side'
+                  ? 'Side-by-side comparison. Shared tags are highlighted below.'
+                  : 'Diff view — added, removed, and changed key points.'}
+              </DialogDescription>
+            </div>
+            {data && !loading && (
+              <div className="flex shrink-0 gap-1 rounded-lg bg-muted/50 p-1">
+                <button
+                  type="button"
+                  onClick={() => setMode('side-by-side')}
+                  className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    mode === 'side-by-side' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <ArrowLeftRight className="h-3 w-3" /> Side-by-side
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('diff')}
+                  className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    mode === 'diff' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <GitCompare className="h-3 w-3" /> Diff
+                </button>
+              </div>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="flex h-[calc(92vh-180px)] flex-col gap-4 overflow-hidden px-6 py-4">
@@ -203,7 +312,7 @@ export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
           {error && (
             <div className="flex flex-1 items-center justify-center text-sm text-destructive">{error}</div>
           )}
-          {data && !loading && (
+          {data && !loading && mode === 'side-by-side' && (
             <>
               <div className="flex flex-1 gap-4 overflow-hidden">
                 <NoteColumn note={data.a} side="A" />
@@ -239,6 +348,7 @@ export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
               </div>
             </>
           )}
+          {data && !loading && mode === 'diff' && <DiffView data={data} />}
         </div>
       </DialogContent>
     </Dialog>
