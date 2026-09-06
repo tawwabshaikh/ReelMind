@@ -32,6 +32,7 @@ import { CompareDialog } from '@/components/reel-notes/compare-dialog'
 import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
 import { ShareButton } from '@/components/reel-notes/share-button'
 import { ReelMindLogo, ReelMindWordmark } from '@/components/reel-notes/reelmind-logo'
+import { safeJsonFetch } from '@/lib/safe-fetch'
 import type {
   Language,
   Theme,
@@ -88,10 +89,10 @@ export default function Home() {
     setSharedMode(true)
     ;(async () => {
       try {
-        const res = await fetch(`/api/notes/${shareId}`)
-        const data = await res.json()
-        if (!res.ok) throw new Error(data?.error || 'Shared note not found')
-        const d = data as NoteDetailResponse
+        const { data, error } = await safeJsonFetch<NoteDetailResponse>(`/api/notes/${shareId}`)
+        if (error) throw new Error(error)
+        if (!data) throw new Error('Shared note not found')
+        const d = data
         const n = d.note
         const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
         setTranscript({
@@ -192,10 +193,10 @@ export default function Home() {
     try {
       const fd = new FormData()
       fd.append('video', file)
-      const res = await fetch('/api/transcribe', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `Transcription failed (${res.status})`)
-      tr = data as TranscribeResponse
+      const { data, error } = await safeJsonFetch<TranscribeResponse>('/api/transcribe', { method: 'POST', body: fd })
+      if (error) throw new Error(error)
+      if (!data) throw new Error('Transcription returned no data')
+      tr = data
       setTranscript(tr)
       toast.success(`Transcribed · ${tr.meta.wordCount} words`)
     } catch (e) {
@@ -211,7 +212,7 @@ export default function Home() {
     setActiveTab('notes')
     setVideoName(file.name)
     try {
-      const res = await fetch('/api/generate-notes', {
+      const { data, error } = await safeJsonFetch<GenerateNotesResponse>('/api/generate-notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -223,9 +224,9 @@ export default function Home() {
           wordCount: tr.meta.wordCount,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `Notes generation failed (${res.status})`)
-      const n = data as GenerateNotesResponse
+      if (error) throw new Error(error)
+      if (!data) throw new Error('Notes generation returned no data')
+      const n = data
       setNotes(n)
       setLoadedNoteId(n.noteId)
       setStage('done')
@@ -254,7 +255,7 @@ export default function Home() {
     setActiveTab('notes')
     setVideoName(transcript.meta.filename)
     try {
-      const res = await fetch('/api/generate-notes', {
+      const { data, error } = await safeJsonFetch<GenerateNotesResponse>('/api/generate-notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -266,9 +267,9 @@ export default function Home() {
           wordCount: transcript.meta.wordCount,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `Notes generation failed (${res.status})`)
-      const n = data as GenerateNotesResponse
+      if (error) throw new Error(error)
+      if (!data) throw new Error('Notes generation returned no data')
+      const n = data
       setNotes(n)
       setLoadedNoteId(n.noteId)
       setHistoryRefreshKey((k) => k + 1)
@@ -287,7 +288,7 @@ export default function Home() {
     setInfographicLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/generate-infographic', {
+      const { data, error } = await safeJsonFetch<GenerateInfographicResponse>('/api/generate-infographic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -297,9 +298,9 @@ export default function Home() {
           theme,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `Infographic failed (${res.status})`)
-      const r = data as GenerateInfographicResponse
+      if (error) throw new Error(error)
+      if (!data) throw new Error('Infographic generation returned no data')
+      const r = data
       setInfographicEn(r.english)
       setInfographicUr(r.urdu)
       setHistoryRefreshKey((k) => k + 1)
@@ -317,10 +318,10 @@ export default function Home() {
   const loadHistoryNote = useCallback(async (id: string) => {
     setError(null)
     try {
-      const res = await fetch(`/api/notes/${id}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `Load failed (${res.status})`)
-      const d = data as NoteDetailResponse
+      const { data, error } = await safeJsonFetch<NoteDetailResponse>(`/api/notes/${id}`)
+      if (error) throw new Error(error)
+      if (!data) throw new Error('Note not found')
+      const d = data
       const n = d.note
       const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
       setTranscript({
