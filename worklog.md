@@ -772,3 +772,17 @@ Task: Transform the existing "Reel → Notes" application into a polished, premi
 ## Notes
 - The full end-to-end pipeline (upload → transcribe → notes → infographic) couldn't be tested in-browser due to (1) sandbox dev-server reaping between commands and (2) LLM API rate limit (429). Both are environmental issues, not code bugs. The transcription chunking fix (task 17-18) and all backend APIs are unchanged.
 - The `reel-notes/` directory name in `src/components/reel-notes/` was kept (changing it would require updating all imports and risks breaking things). It's an internal path, not user-facing.
+
+---
+Task ID: cron-363310-keepalive
+Agent: main (cron loop)
+Task: Keep ReelMind dev server alive on port 3000
+
+Work Log:
+- 19:03 run: found server dead (conn refused), restarted, 200 OK
+- 19:08 run: found server dead again, restarted, 200 OK
+- 19:13 run: found server dead again, restarted, 200 OK
+
+Stage Summary:
+- Confirmed pattern: sandbox reaps the dev server shortly after every cron run ends; each 5-min cron run finds it dead and restores it.
+- Keep-alive cron is functioning as designed; server is up at the end of each run. No code changes needed.
