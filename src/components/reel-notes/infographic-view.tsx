@@ -55,14 +55,14 @@ export function InfographicView({ english, urdu, loading, canGenerate, onGenerat
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <ImageIcon className="h-4 w-4 text-emerald-600" />
-          <span className="text-sm font-semibold">Visual infographic</span>
-          <Badge variant="secondary" className="bg-amber-100/70 text-amber-800">Instagram-ready</Badge>
+          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">Infographic</span>
+          <Badge variant="outline" className="text-[10px] text-muted-foreground">1080×1350</Badge>
         </div>
         <Button
           onClick={onGenerate}
           disabled={!canGenerate || loading}
-          className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800"
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
         >
           {loading ? (
             <>

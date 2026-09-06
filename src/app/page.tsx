@@ -3,30 +3,20 @@
 import { useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
-  Film,
   Loader2,
-  Play,
-  Sparkles,
+  ArrowRight,
   FileText,
   ScrollText,
   Image as ImageIcon,
   CheckCircle2,
   Circle,
   AlertCircle,
-  Github,
-  Heart,
   RotateCw,
-  Languages,
-  Wand2,
-  Zap,
-  ShieldCheck,
-  Download,
   Share2,
   Keyboard,
   Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +31,7 @@ import { NoteEditor } from '@/components/reel-notes/note-editor'
 import { CompareDialog } from '@/components/reel-notes/compare-dialog'
 import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
 import { ShareButton } from '@/components/reel-notes/share-button'
+import { ReelMindLogo, ReelMindWordmark } from '@/components/reel-notes/reelmind-logo'
 import type {
   Language,
   Theme,
@@ -54,11 +45,11 @@ import type {
 
 type Stage = 'idle' | 'transcribing' | 'generating-notes' | 'done'
 
-const STEPS: { key: Stage | 'infographic'; label: string; urdu: string }[] = [
-  { key: 'transcribing', label: 'Transcribe', urdu: 'ٹرانسکرائب' },
-  { key: 'generating-notes', label: 'Summarize', urdu: 'خلاصہ' },
-  { key: 'done', label: 'Notes', urdu: 'نوٹس' },
-  { key: 'infographic', label: 'Infographic', urdu: 'انفوگرافک' },
+const STEPS: { key: Stage | 'infographic'; label: string }[] = [
+  { key: 'transcribing', label: 'Transcribe' },
+  { key: 'generating-notes', label: 'Summarize' },
+  { key: 'done', label: 'Create notes' },
+  { key: 'infographic', label: 'Create infographic' },
 ]
 
 export default function Home() {
@@ -134,7 +125,6 @@ export default function Home() {
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Don't intercept when typing in inputs/textareas or when a modal is open.
       const target = e.target as HTMLElement
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return
@@ -255,7 +245,6 @@ export default function Home() {
     }
   }, [file, language])
 
-  /** Regenerate just the notes from the existing transcript (no re-upload). */
   const regenerateNotes = useCallback(async () => {
     if (!transcript) return
     setRegeneratingNotes(true)
@@ -263,6 +252,7 @@ export default function Home() {
     setInfographicEn(null)
     setInfographicUr(null)
     setActiveTab('notes')
+    setVideoName(transcript.meta.filename)
     try {
       const res = await fetch('/api/generate-notes', {
         method: 'POST',
@@ -281,7 +271,6 @@ export default function Home() {
       const n = data as GenerateNotesResponse
       setNotes(n)
       setLoadedNoteId(n.noteId)
-      setVideoName(transcript.meta.filename)
       setHistoryRefreshKey((k) => k + 1)
       toast.success('Notes regenerated')
     } catch (e) {
@@ -315,7 +304,7 @@ export default function Home() {
       setInfographicUr(r.urdu)
       setHistoryRefreshKey((k) => k + 1)
       setActiveTab('infographic')
-      toast.success(`Infographic rendered · ${theme}`)
+      toast.success('Infographic rendered')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Infographic error'
       setError(msg)
@@ -325,7 +314,6 @@ export default function Home() {
     }
   }, [notes, theme, loadedNoteId])
 
-  /** Load a historical note's full detail back into the workspace. */
   const loadHistoryNote = useCallback(async (id: string) => {
     setError(null)
     try {
@@ -374,7 +362,6 @@ export default function Home() {
   })()
   const infographicDone = !!(infographicEn || infographicUr)
 
-  /** After inline-edit save: update notes state + clear stale infographics. */
   const handleNotesSaved = useCallback((updated: NoteDetail) => {
     setNotes({
       noteId: updated.id,
@@ -382,14 +369,12 @@ export default function Home() {
       english: updated.english,
       urdu: updated.urdu,
     })
-    // Edited notes no longer match the previously-rendered infographic, so clear it.
     setInfographicEn(null)
     setInfographicUr(null)
     setHistoryRefreshKey((k) => k + 1)
     toast.success('Notes saved — regenerate the infographic to reflect edits.')
   }, [])
 
-  /** After delete: if the currently-loaded note was among the deleted, reset the workspace. */
   const handleNotesDeleted = useCallback((deletedIds: string[]) => {
     if (loadedNoteId && deletedIds.includes(loadedNoteId)) {
       reset()
@@ -397,25 +382,31 @@ export default function Home() {
     }
   }, [loadedNoteId, reset])
 
+  // ---- Progress label ----
+  const progressLabel = busy
+    ? stage === 'transcribing'
+      ? 'Transcribing…'
+      : stage === 'generating-notes'
+        ? 'Summarizing…'
+        : regeneratingNotes
+          ? 'Regenerating…'
+          : 'Working…'
+    : null
+
   return (
-    <div className="flex min-h-screen flex-col bg-background bg-brand-hero">
-      {/* ---------------- Header ---------------- */}
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-sm">
-            <Film className="h-5 w-5" />
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* ===================== Header ===================== */}
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
+          <ReelMindLogo size={26} />
+          <div className="flex items-baseline gap-2">
+            <ReelMindWordmark className="text-base font-semibold tracking-tight" />
+            <span className="hidden text-xs text-muted-foreground sm:inline">Video → Knowledge</span>
           </div>
-          <div className="leading-none">
-            <h1 className="text-lg font-bold tracking-tight">
-              Reel <span className="text-muted-foreground">→</span>{' '}
-              <span className="text-gradient-brand">Notes</span>
-            </h1>
-            <p className="text-[11px] text-muted-foreground">Bilingual video notes + infographic generator</p>
-          </div>
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-1">
             {sharedMode && (
               <Badge variant="outline" className="mr-1 gap-1 border-amber-500/40 text-amber-700">
-                <Eye className="h-3 w-3" /> Shared view
+                <Eye className="h-3 w-3" /> Shared
               </Badge>
             )}
             {notes && !sharedMode && (
@@ -424,7 +415,7 @@ export default function Home() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9"
+              className="h-8 w-8"
               onClick={() => setShortcutsOpen(true)}
               aria-label="Keyboard shortcuts"
               title="Keyboard shortcuts (⌘K)"
@@ -432,113 +423,96 @@ export default function Home() {
               <Keyboard className="h-4 w-4" />
             </Button>
             <ThemeToggle />
-            <Badge variant="outline" className="hidden gap-1 border-emerald-500/30 text-emerald-700 sm:flex">
-              <Sparkles className="h-3 w-3" /> v3
-            </Badge>
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noreferrer"
-              className="hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
-              aria-label="Source"
-            >
-              <Github className="h-4 w-4" />
-            </a>
           </div>
         </div>
       </header>
 
-      {/* ---------------- Hero (hidden in shared view) ---------------- */}
+      {/* ===================== Hero (compact, hidden in shared view) ===================== */}
       {!sharedMode && (
-      <section className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6">
-        <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30">
-            <Sparkles className="h-3 w-3" /> Whisper transcription · Claude-style summarization
-          </span>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-            Turn any video into <span className="text-gradient-brand">bilingual notes</span> & a shareable infographic.
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-            Upload a reel, pick English, Urdu (proper Nastaliq script), or both — get clean Markdown notes and an
-            Instagram-friendly PNG infographic with correct RTL text shaping.
-          </p>
-        </div>
-
-        {/* Feature strip */}
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <FeatureChip icon={<Languages className="h-4 w-4" />} title="Bilingual" sub="EN · UR · Both" />
-          <FeatureChip icon={<Wand2 className="h-4 w-4" />} title="3 themes" sub="Emerald · Midnight · Sunrise" />
-          <FeatureChip icon={<ImageIcon className="h-4 w-4" />} title="PNG 1080×1350" sub="Instagram-ready" />
-          <FeatureChip icon={<ShieldCheck className="h-4 w-4" />} title="History + Share" sub="Reload · Public links" />
-        </div>
-      </section>
+        <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
+          <div className="max-w-2xl">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+              Turn videos into knowledge.
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
+              Transcribe videos, generate structured notes, and create shareable visual summaries — in English or Urdu.
+            </p>
+            <p className="mt-1 text-xs font-medium text-accent">
+              Learn faster. Remember more.
+            </p>
+          </div>
+          {/* Compact feature strip */}
+          <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-1 w-1 rounded-full bg-accent" /> Transcribe
+            </span>
+            <span className="text-border">·</span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1 w-1 rounded-full bg-accent" /> Understand
+            </span>
+            <span className="text-border">·</span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1 w-1 rounded-full bg-accent" /> Create
+            </span>
+          </div>
+        </section>
       )}
 
-      {/* Shared-view banner */}
+      {/* ===================== Shared-view banner ===================== */}
       {sharedMode && (
-        <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-50/60 px-4 py-3 dark:bg-amber-950/20">
+        <section className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-50/60 px-4 py-2.5 dark:bg-amber-950/20">
             <div className="flex items-center gap-2 text-sm">
               <Eye className="h-4 w-4 text-amber-600" />
-              <span className="font-semibold">You're viewing a shared note</span>
-              <span className="text-muted-foreground">— read-only. Download buttons still work.</span>
+              <span className="font-medium">You're viewing a shared note</span>
+              <span className="text-muted-foreground">— read-only. Downloads still work.</span>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="h-7 gap-1.5 text-xs"
               onClick={() => {
                 window.location.href = window.location.origin
               }}
             >
-              <Film className="h-3.5 w-3.5" />
               Back to app
             </Button>
           </div>
         </section>
       )}
 
-      {/* ---------------- Main ---------------- */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
-        <div className="grid gap-6 lg:grid-cols-5">
-          {/* Left: config (hidden in shared view) */}
+      {/* ===================== Main workspace ===================== */}
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
+        <div className="grid gap-5 lg:grid-cols-5">
+          {/* -------- LEFT: Create (40%) -------- */}
           {!sharedMode && (
-          <div className="space-y-5 lg:col-span-2">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Film className="h-4 w-4 text-emerald-600" /> 1 · Upload video
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Drop a short clip, talk, or reel. Audio is extracted with ffmpeg and transcribed via ASR.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <UploadZone file={file} onFile={handleFile} disabled={busy} />
-                <LanguageSelector value={language} onChange={setLanguage} disabled={busy} />
+            <div className="space-y-4 lg:col-span-2">
+              {/* Create panel */}
+              <div className="rounded-lg border border-border bg-card p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold text-foreground">Create</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Turn a video into clear, useful knowledge.</p>
+                </div>
 
-                <div className="flex flex-col gap-2">
+                <div className="space-y-4">
+                  <UploadZone file={file} onFile={handleFile} disabled={busy} />
+                  <LanguageSelector value={language} onChange={setLanguage} disabled={busy} />
+
                   <Button
                     onClick={runPipeline}
                     disabled={!file || busy}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm hover:from-emerald-700 hover:to-emerald-800"
-                    size="lg"
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    size="default"
                   >
                     {busy ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {stage === 'transcribing'
-                          ? 'Transcribing…'
-                          : stage === 'generating-notes'
-                            ? 'Generating notes…'
-                            : regeneratingNotes
-                              ? 'Regenerating…'
-                              : 'Working…'}
+                        {progressLabel}
                       </>
                     ) : (
                       <>
-                        <Play className="mr-2 h-4 w-4" />
-                        Transcribe &amp; generate notes
+                        Generate knowledge
+                        <ArrowRight className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
@@ -547,91 +521,90 @@ export default function Home() {
                     <Button
                       onClick={regenerateNotes}
                       variant="outline"
-                      className="w-full border-emerald-500/40 text-emerald-700 hover:bg-emerald-50"
+                      className="w-full text-xs"
+                      size="sm"
                     >
-                      <RotateCw className="mr-2 h-3.5 w-3.5" />
-                      Regenerate notes only
+                      <RotateCw className="mr-1.5 h-3 w-3" />
+                      Regenerate notes
                     </Button>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Pipeline progress */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Pipeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ol className="space-y-2.5">
-                  {STEPS.map((s, i) => {
-                    const done = i < stageIndex || (s.key === 'infographic' && infographicDone)
-                    const activeNow = i === stageIndex || (s.key === 'infographic' && infographicLoading)
-                    return (
-                      <li key={s.key} className="flex items-center gap-2.5 text-sm">
-                        {done ? (
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                        ) : activeNow ? (
-                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-600" />
-                        ) : (
-                          <Circle className="h-4 w-4 shrink-0 text-muted-foreground/40" />
-                        )}
-                        <span className={done || activeNow ? 'font-medium text-foreground' : 'text-muted-foreground'}>
-                          {s.label}
-                        </span>
-                        <span className="font-urdu text-xs text-muted-foreground" dir="rtl">
-                          {s.urdu}
-                        </span>
-                        {s.key === 'infographic' && !done && !activeNow && notes && (
-                          <span className="ml-auto text-[10px] text-muted-foreground">optional</span>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ol>
-              </CardContent>
-            </Card>
+              {/* Compact contextual progress — only visible during generation */}
+              {busy && (
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <div className="mb-2.5 flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+                    <span className="text-xs font-medium text-foreground">{progressLabel}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {STEPS.map((s, i) => {
+                      const done = i < stageIndex
+                      const activeNow = i === stageIndex
+                      return (
+                        <div key={s.key} className="flex items-center gap-2 text-xs">
+                          {done ? (
+                            <CheckCircle2 className="h-3 w-3 shrink-0 text-accent" />
+                          ) : activeNow ? (
+                            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-accent" />
+                          ) : (
+                            <Circle className="h-3 w-3 shrink-0 text-muted-foreground/30" />
+                          )}
+                          <span className={done || activeNow ? 'text-foreground' : 'text-muted-foreground/60'}>
+                            {s.label}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Something went wrong</AlertTitle>
-                <AlertDescription className="break-words">{error}</AlertDescription>
-              </Alert>
-            )}
-          </div>
+              {/* Error */}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Something went wrong</AlertTitle>
+                  <AlertDescription className="break-words">{error}</AlertDescription>
+                </Alert>
+              )}
+            </div>
           )}
 
-          {/* Right: results (full-width in shared view) */}
+          {/* -------- RIGHT: Results (60%) -------- */}
           <div className={sharedMode ? 'lg:col-span-5' : 'lg:col-span-3'}>
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      Results
-                      {loadedNoteId && (
-                        <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
-                          from history
-                        </Badge>
-                      )}
-                    </CardTitle>
-                    <TabsList>
-                      <TabsTrigger value="notes" disabled={!notes}>
-                        <FileText className="mr-1.5 h-3.5 w-3.5" /> Notes
-                      </TabsTrigger>
-                      <TabsTrigger value="transcript" disabled={!transcript}>
-                        <ScrollText className="mr-1.5 h-3.5 w-3.5" /> Transcript
-                      </TabsTrigger>
-                      <TabsTrigger value="infographic" disabled={!notes}>
-                        <ImageIcon className="mr-1.5 h-3.5 w-3.5" /> Infographic
-                      </TabsTrigger>
-                    </TabsList>
-                  </div>
+            <div className="rounded-lg border border-border bg-card">
+              {/* Results header */}
+              <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">Results</h3>
+                  {loadedNoteId && (
+                    <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                      from history
+                    </Badge>
+                  )}
+                </div>
+              </div>
 
-                  <TabsContent value="notes" className="mt-4">
+              {/* Tabs */}
+              <div className="p-5">
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="mb-4 border-b border-transparent">
+                    <TabsTrigger value="notes" disabled={!notes}>
+                      <FileText className="mr-1.5 h-3.5 w-3.5" /> Notes
+                    </TabsTrigger>
+                    <TabsTrigger value="transcript" disabled={!transcript}>
+                      <ScrollText className="mr-1.5 h-3.5 w-3.5" /> Transcript
+                    </TabsTrigger>
+                    <TabsTrigger value="infographic" disabled={!notes}>
+                      <ImageIcon className="mr-1.5 h-3.5 w-3.5" /> Infographic
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="notes" className="mt-0">
                     {notes ? (
-                      <div className="animate-rn-fade-up">
+                      <div className="animate-rm-fade-up">
                         <NotesView
                           english={notes.english}
                           urdu={notes.urdu}
@@ -644,31 +617,23 @@ export default function Home() {
                         />
                       </div>
                     ) : (
-                      <EmptyState
-                        icon={<FileText className="h-8 w-8" />}
-                        title="No notes yet"
-                        desc="Upload a video and run the pipeline to generate structured notes."
-                      />
+                      <EmptyState />
                     )}
                   </TabsContent>
 
-                  <TabsContent value="transcript" className="mt-4">
+                  <TabsContent value="transcript" className="mt-0">
                     {transcript ? (
-                      <div className="animate-rn-fade-up">
+                      <div className="animate-rm-fade-up">
                         <TranscriptView transcript={transcript.transcript} meta={transcript.meta} />
                       </div>
                     ) : (
-                      <EmptyState
-                        icon={<ScrollText className="h-8 w-8" />}
-                        title="No transcript yet"
-                        desc="The transcribed text will appear here after processing."
-                      />
+                      <EmptyState />
                     )}
                   </TabsContent>
 
-                  <TabsContent value="infographic" className="mt-4">
+                  <TabsContent value="infographic" className="mt-0">
                     {notes ? (
-                      <div className="animate-rn-fade-up">
+                      <div className="animate-rm-fade-up">
                         <InfographicView
                           english={infographicEn}
                           urdu={infographicUr}
@@ -680,22 +645,18 @@ export default function Home() {
                         />
                       </div>
                     ) : (
-                      <EmptyState
-                        icon={<ImageIcon className="h-8 w-8" />}
-                        title="No notes to visualize"
-                        desc="Generate notes first, then turn them into a PNG infographic."
-                      />
+                      <EmptyState />
                     )}
                   </TabsContent>
                 </Tabs>
-              </CardHeader>
-            </Card>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* History (hidden in shared view) */}
         {!sharedMode && (
-          <div className="mt-6">
+          <div className="mt-5">
             <HistoryPanel
               onLoad={loadHistoryNote}
               activeId={loadedNoteId}
@@ -710,16 +671,14 @@ export default function Home() {
         )}
       </main>
 
-      {/* ---------------- Footer ---------------- */}
-      <footer className="mt-auto border-t border-border/60 bg-background/60">
-        <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:px-6">
+      {/* ===================== Footer ===================== */}
+      <footer className="mt-auto border-t border-border/60">
+        <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:px-6">
           <p className="flex items-center gap-1.5">
-            <Zap className="h-3 w-3 text-amber-500" />
-            Reel → Notes · Next.js 16 · Playwright + Noto Nastaliq Urdu · ffmpeg + z-ai ASR/LLM
+            <ReelMindLogo size={14} />
+            ReelMind · AI Learning · Video → Knowledge
           </p>
-          <p className="inline-flex items-center gap-1">
-            Built with <Heart className="h-3 w-3 fill-red-500 text-red-500" /> for bilingual creators
-          </p>
+          <p>Watch less. Learn more.</p>
         </div>
       </footer>
 
@@ -747,27 +706,27 @@ export default function Home() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Keyboard className="h-4 w-4 text-emerald-600" />
+              <Keyboard className="h-4 w-4 text-accent" />
               Keyboard shortcuts
             </DialogTitle>
             <DialogDescription>Press these anywhere outside of text fields.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {[
               { keys: ['⌘', 'G'], action: 'Generate / regenerate infographic' },
               { keys: ['⌘', 'E'], action: 'Edit notes' },
               { keys: ['⌘', '1'], action: 'Switch to Notes tab' },
               { keys: ['⌘', '2'], action: 'Switch to Transcript tab' },
               { keys: ['⌘', '3'], action: 'Switch to Infographic tab' },
-              { keys: ['⌘', 'K'], action: 'Toggle this shortcuts dialog' },
+              { keys: ['⌘', 'K'], action: 'Toggle this dialog' },
             ].map((s) => (
-              <div key={s.action} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+              <div key={s.action} className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/20 px-3 py-2">
                 <span className="text-sm">{s.action}</span>
                 <span className="flex shrink-0 gap-1">
                   {s.keys.map((k) => (
                     <kbd
                       key={k}
-                      className="inline-flex h-6 min-w-6 items-center justify-center rounded border border-border bg-background px-1.5 font-mono text-xs font-semibold shadow-sm"
+                      className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-card px-1.5 font-mono text-xs font-medium"
                     >
                       {k}
                     </kbd>
@@ -785,31 +744,19 @@ export default function Home() {
   )
 }
 
-function FeatureChip({ icon, title, sub }: { icon: React.ReactNode; title: string; sub: string }) {
+/** Premium empty state for the Results panel. */
+function EmptyState() {
   return (
-    <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 backdrop-blur-sm">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
-        {icon}
+    <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+        <FileText className="h-5 w-5 text-muted-foreground" />
       </div>
-      <div className="min-w-0 leading-tight">
-        <div className="text-xs font-semibold">{title}</div>
-        <div className="truncate text-[10px] text-muted-foreground">{sub}</div>
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">Your workspace is ready</p>
+        <p className="text-xs text-muted-foreground">
+          Upload a video to generate: Notes · Transcript · Infographic
+        </p>
       </div>
     </div>
   )
 }
-
-function EmptyState({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-16 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        {icon}
-      </div>
-      <p className="text-sm font-semibold">{title}</p>
-      <p className="max-w-sm text-xs text-muted-foreground">{desc}</p>
-    </div>
-  )
-}
-
-// Keep the Download import referenced (used by child components via re-export pattern)
-void Download

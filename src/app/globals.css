@@ -43,73 +43,86 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ========================================================================= */
+/* ReelMind Design System                                                     */
+/* AI Learning · Video → Knowledge                                            */
+/* ========================================================================= */
+
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+
+  /* ReelMind brand palette */
+  --rm-primary: #0B3D2E;       /* Deep forest green — brand primary */
+  --rm-accent: #10B981;        /* Emerald — accent / active states */
+  --rm-accent-light: #A7F3D0;  /* Light emerald — subtle highlights */
+  --rm-highlight: #F59E0B;     /* Amber — used very sparingly */
+
+  /* Semantic tokens mapped to the brand palette */
+  --background: #F8FAF9;       /* Calm off-white with green tint */
+  --foreground: #111827;       /* Near-black for main text */
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
+  --primary: #0B3D2E;          /* Brand primary for buttons */
+  --primary-foreground: #FFFFFF;
+  --secondary: #F1F5F4;
+  --secondary-foreground: #111827;
+  --muted: #F1F5F4;
+  --muted-foreground: #64748B;  /* Secondary text */
+  --accent: #10B981;            /* Emerald accent */
+  --accent-foreground: #FFFFFF;
+  --destructive: #DC2626;
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #10B981;
+  --chart-1: #10B981;
+  --chart-2: #0B3D2E;
+  --chart-3: #F59E0B;
+  --chart-4: #64748B;
+  --chart-5: #A7F3D0;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #0B3D2E;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F1F5F4;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #10B981;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0B1112;       /* Dark surface */
+  --foreground: #F8FAF9;
+  --card: #131A1C;
+  --card-foreground: #F8FAF9;
+  --popover: #131A1C;
+  --popover-foreground: #F8FAF9;
+  --primary: #10B981;
+  --primary-foreground: #0B1112;
+  --secondary: #1A2326;
+  --secondary-foreground: #F8FAF9;
+  --muted: #1A2326;
+  --muted-foreground: #94A3B8;
+  --accent: #10B981;
+  --accent-foreground: #0B1112;
+  --destructive: #F87171;
+  --border: #1A2326;
+  --input: #1A2326;
+  --ring: #10B981;
+  --chart-1: #10B981;
+  --chart-2: #A7F3D0;
+  --chart-3: #F59E0B;
+  --chart-4: #64748B;
+  --chart-5: #0B3D2E;
+  --sidebar: #131A1C;
+  --sidebar-foreground: #F8FAF9;
+  --sidebar-primary: #10B981;
+  --sidebar-primary-foreground: #0B1112;
+  --sidebar-accent: #1A2326;
+  --sidebar-accent-foreground: #F8FAF9;
+  --sidebar-border: #1A2326;
+  --sidebar-ring: #10B981;
 }
 
 @layer base {
@@ -118,11 +131,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
 /* ----------------------------------------------------------------------- */
-/* Reel → Notes: Urdu (Nastaliq) font + RTL helpers                         */
+/* Urdu (Nastaliq) font + RTL helpers                                      */
 /* ----------------------------------------------------------------------- */
 @font-face {
   font-family: 'Noto Nastaliq Urdu';
@@ -147,52 +161,51 @@
   text-align: right;
 }
 
-/* App-themed gradient text (emerald → amber) used for the brand wordmark */
-.text-gradient-brand {
-  background: linear-gradient(120deg, #047857 0%, #10b981 45%, #f59e0b 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+/* ----------------------------------------------------------------------- */
+/* ReelMind brand utilities                                                */
+/* ----------------------------------------------------------------------- */
+
+/* Emerald accent text for the "Mind" part of the wordmark */
+.text-accent-emerald {
+  color: var(--rm-accent);
 }
 
-/* Soft brand background used on the page hero */
-.bg-brand-hero {
-  background:
-    radial-gradient(900px 500px at 85% -10%, rgba(16, 185, 129, 0.10), transparent 60%),
-    radial-gradient(700px 400px at 10% 0%, rgba(245, 158, 11, 0.10), transparent 55%);
-}
-.dark .bg-brand-hero {
-  background:
-    radial-gradient(900px 500px at 85% -10%, rgba(16, 185, 129, 0.08), transparent 60%),
-    radial-gradient(700px 400px at 10% 0%, rgba(245, 158, 11, 0.06), transparent 55%);
+/* Subtle page background — calm, not flashy */
+.bg-reelmind {
+  background-color: var(--background);
 }
 
-/* Custom thin scrollbar for long transcript / notes panes */
+/* Custom thin scrollbar */
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(16, 185, 129, 0.45) transparent;
+  scrollbar-color: rgba(100, 116, 139, 0.3) transparent;
 }
 .scroll-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: rgba(16, 185, 129, 0.4);
+  background: rgba(100, 116, 139, 0.25);
   border-radius: 999px;
 }
 .scroll-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.65);
+  background: rgba(100, 116, 139, 0.45);
 }
 .scroll-thin::-webkit-scrollbar-track {
   background: transparent;
 }
 
 /* Subtle entrance animation for results */
-@keyframes rn-fade-up {
-  from { opacity: 0; transform: translateY(8px); }
+@keyframes rm-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.animate-rn-fade-up {
-  animation: rn-fade-up 0.4s ease-out both;
+.animate-rm-fade-up {
+  animation: rm-fade-up 0.3s ease-out both;
+}
+
+/* Compact, premium focus ring */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 2px;
 }

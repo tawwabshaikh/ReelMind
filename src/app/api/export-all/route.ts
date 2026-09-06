@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       if (isMultiple) {
         const cover = pdf.addPage([PAGE_W, PAGE_H])
         cover.drawRectangle({ x: 0, y: PAGE_H - 120, width: PAGE_W, height: 120, color: ACCENT })
-        cover.drawText('REEL -> NOTES', {
+        cover.drawText('REELMIND', {
           x: MARGIN,
           y: PAGE_H - 60,
           size: 18,

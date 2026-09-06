@@ -1,0 +1,816 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useCallback, useEffect } from 'react'
+     4→     4→import { toast } from 'sonner'
+     5→     5→import {
+     6→     6→  Film,
+     7→     7→  Loader2,
+     8→     8→  Play,
+     9→     9→  Sparkles,
+    10→    10→  FileText,
+    11→    11→  ScrollText,
+    12→    12→  Image as ImageIcon,
+    13→    13→  CheckCircle2,
+    14→    14→  Circle,
+    15→    15→  AlertCircle,
+    16→    16→  Github,
+    17→    17→  Heart,
+    18→    18→  RotateCw,
+    19→    19→  Languages,
+    20→    20→  Wand2,
+    21→    21→  Zap,
+    22→    22→  ShieldCheck,
+    23→    23→  Download,
+    24→    24→  Share2,
+    25→    25→  Keyboard,
+    26→    26→  Eye,
+    27→    27→} from 'lucide-react'
+    28→    28→import { Button } from '@/components/ui/button'
+    29→    29→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+    30→    30→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    31→    31→import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+    32→    32→import { Badge } from '@/components/ui/badge'
+    33→    33→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+    34→    34→import { UploadZone } from '@/components/reel-notes/upload-zone'
+    35→    35→import { LanguageSelector } from '@/components/reel-notes/language-selector'
+    36→    36→import { NotesView } from '@/components/reel-notes/notes-view'
+    37→    37→import { TranscriptView } from '@/components/reel-notes/transcript-view'
+    38→    38→import { InfographicView } from '@/components/reel-notes/infographic-view'
+    39→    39→import { HistoryPanel } from '@/components/reel-notes/history-panel'
+    40→    40→import { NoteEditor } from '@/components/reel-notes/note-editor'
+    41→    41→import { CompareDialog } from '@/components/reel-notes/compare-dialog'
+    42→    42→import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
+    43→    43→import { ShareButton } from '@/components/reel-notes/share-button'
+    44→    44→import type {
+    45→    45→  Language,
+    46→    46→  Theme,
+    47→    47→  TranscribeResponse,
+    48→    48→  GenerateNotesResponse,
+    49→    49→  GenerateInfographicResponse,
+    50→    50→  NoteDetailResponse,
+    51→    51→  NoteDetail,
+    52→    52→  InfographicFile,
+    53→    53→} from '@/lib/types'
+    54→    54→
+    55→    55→type Stage = 'idle' | 'transcribing' | 'generating-notes' | 'done'
+    56→    56→
+    57→    57→const STEPS: { key: Stage | 'infographic'; label: string; urdu: string }[] = [
+    58→    58→  { key: 'transcribing', label: 'Transcribe', urdu: 'ٹرانسکرائب' },
+    59→    59→  { key: 'generating-notes', label: 'Summarize', urdu: 'خلاصہ' },
+    60→    60→  { key: 'done', label: 'Notes', urdu: 'نوٹس' },
+    61→    61→  { key: 'infographic', label: 'Infographic', urdu: 'انفوگرافک' },
+    62→    62→]
+    63→    63→
+    64→    64→export default function Home() {
+    65→    65→  const [file, setFile] = useState<File | null>(null)
+    66→    66→  const [language, setLanguage] = useState<Language>('english')
+    67→    67→  const [theme, setTheme] = useState<Theme>('emerald')
+    68→    68→
+    69→    69→  const [stage, setStage] = useState<Stage>('idle')
+    70→    70→  const [error, setError] = useState<string | null>(null)
+    71→    71→
+    72→    72→  const [transcript, setTranscript] = useState<TranscribeResponse | null>(null)
+    73→    73→  const [notes, setNotes] = useState<GenerateNotesResponse | null>(null)
+    74→    74→
+    75→    75→  const [infographicEn, setInfographicEn] = useState<InfographicFile | null>(null)
+    76→    76→  const [infographicUr, setInfographicUr] = useState<InfographicFile | null>(null)
+    77→    77→  const [infographicLoading, setInfographicLoading] = useState(false)
+    78→    78→
+    79→    79→  const [activeTab, setActiveTab] = useState<string>('notes')
+    80→    80→  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
+    81→    81→  const [loadedNoteId, setLoadedNoteId] = useState<string | null>(null)
+    82→    82→  const [regeneratingNotes, setRegeneratingNotes] = useState(false)
+    83→    83→  const [editorOpen, setEditorOpen] = useState(false)
+    84→    84→  const [videoName, setVideoName] = useState<string>('')
+    85→    85→  const [sharedMode, setSharedMode] = useState(false)
+    86→    86→  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+    87→    87→  const [compareOpen, setCompareOpen] = useState(false)
+    88→    88→  const [compareIds, setCompareIds] = useState<{ a: string | null; b: string | null }>({ a: null, b: null })
+    89→    89→
+    90→    90→  const busy = stage === 'transcribing' || stage === 'generating-notes' || regeneratingNotes
+    91→    91→
+    92→    92→  // ---- Share-link detection: ?share=<id> loads a read-only note ----
+    93→    93→  useEffect(() => {
+    94→    94→    const params = new URLSearchParams(window.location.search)
+    95→    95→    const shareId = params.get('share')
+    96→    96→    if (!shareId) return
+    97→    97→    setSharedMode(true)
+    98→    98→    ;(async () => {
+    99→    99→      try {
+   100→   100→        const res = await fetch(`/api/notes/${shareId}`)
+   101→   101→        const data = await res.json()
+   102→   102→        if (!res.ok) throw new Error(data?.error || 'Shared note not found')
+   103→   103→        const d = data as NoteDetailResponse
+   104→   104→        const n = d.note
+   105→   105→        const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
+   106→   106→        setTranscript({
+   107→   107→          transcript: n.transcript,
+   108→   108→          meta: {
+   109→   109→            filename: n.videoName,
+   110→   110→            sizeBytes: n.sizeBytes ?? 0,
+   111→   111→            durationSec: n.durationSec,
+   112→   112→            wordCount,
+   113→   113→          },
+   114→   114→        })
+   115→   115→        setNotes({
+   116→   116→          noteId: n.id,
+   117→   117→          language: n.language,
+   118→   118→          english: n.english,
+   119→   119→          urdu: n.urdu,
+   120→   120→        })
+   121→   121→        setInfographicEn(n.infographicEn)
+   122→   122→        setInfographicUr(n.infographicUr)
+   123→   123→        setLoadedNoteId(n.id)
+   124→   124→        setVideoName(n.videoName)
+   125→   125→        setStage('done')
+   126→   126→        setActiveTab('notes')
+   127→   127→        toast.success(`Viewing shared note: ${n.videoName}`)
+   128→   128→      } catch (e) {
+   129→   129→        toast.error(e instanceof Error ? e.message : 'Failed to load shared note')
+   130→   130→      }
+   131→   131→    })()
+   132→   132→  }, [])
+   133→   133→
+   134→   134→  // ---- Keyboard shortcuts ----
+   135→   135→  useEffect(() => {
+   136→   136→    const handler = (e: KeyboardEvent) => {
+   137→   137→      // Don't intercept when typing in inputs/textareas or when a modal is open.
+   138→   138→      const target = e.target as HTMLElement
+   139→   139→      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+   140→   140→        return
+   141→   141→      }
+   142→   142→      const mod = e.metaKey || e.ctrlKey
+   143→   143→      if (mod && e.key === 'g' && notes && !infographicLoading) {
+   144→   144→        e.preventDefault()
+   145→   145→        generateInfographic()
+   146→   146→      } else if (mod && e.key === 'e' && notes && !sharedMode) {
+   147→   147→        e.preventDefault()
+   148→   148→        setEditorOpen(true)
+   149→   149→      } else if (mod && e.key === '1' && (transcript || notes)) {
+   150→   150→        e.preventDefault()
+   151→   151→        setActiveTab('notes')
+   152→   152→      } else if (mod && e.key === '2' && transcript) {
+   153→   153→        e.preventDefault()
+   154→   154→        setActiveTab('transcript')
+   155→   155→      } else if (mod && e.key === '3' && notes) {
+   156→   156→        e.preventDefault()
+   157→   157→        setActiveTab('infographic')
+   158→   158→      } else if (mod && e.key === 'k') {
+   159→   159→        e.preventDefault()
+   160→   160→        setShortcutsOpen((v) => !v)
+   161→   161→      }
+   162→   162→    }
+   163→   163→    window.addEventListener('keydown', handler)
+   164→   164→    return () => window.removeEventListener('keydown', handler)
+   165→   165→  }, [notes, transcript, infographicLoading, sharedMode])
+   166→   166→
+   167→   167→  const reset = useCallback(() => {
+   168→   168→    setTranscript(null)
+   169→   169→    setNotes(null)
+   170→   170→    setInfographicEn(null)
+   171→   171→    setInfographicUr(null)
+   172→   172→    setError(null)
+   173→   173→    setStage('idle')
+   174→   174→    setLoadedNoteId(null)
+   175→   175→    setVideoName('')
+   176→   176→  }, [])
+   177→   177→
+   178→   178→  const handleFile = useCallback(
+   179→   179→    (f: File | null) => {
+   180→   180→      setFile(f)
+   181→   181→      reset()
+   182→   182→    },
+   183→   183→    [reset],
+   184→   184→  )
+   185→   185→
+   186→   186→  const runPipeline = useCallback(async () => {
+   187→   187→    if (!file) {
+   188→   188→      toast.error('Please choose a video file first.')
+   189→   189→      return
+   190→   190→    }
+   191→   191→    setError(null)
+   192→   192→    setTranscript(null)
+   193→   193→    setNotes(null)
+   194→   194→    setInfographicEn(null)
+   195→   195→    setInfographicUr(null)
+   196→   196→    setLoadedNoteId(null)
+   197→   197→    setActiveTab('transcript')
+   198→   198→
+   199→   199→    // ---- Stage 1: transcribe ----
+   200→   200→    setStage('transcribing')
+   201→   201→    let tr: TranscribeResponse
+   202→   202→    try {
+   203→   203→      const fd = new FormData()
+   204→   204→      fd.append('video', file)
+   205→   205→      const res = await fetch('/api/transcribe', { method: 'POST', body: fd })
+   206→   206→      const data = await res.json()
+   207→   207→      if (!res.ok) throw new Error(data?.error || `Transcription failed (${res.status})`)
+   208→   208→      tr = data as TranscribeResponse
+   209→   209→      setTranscript(tr)
+   210→   210→      toast.success(`Transcribed · ${tr.meta.wordCount} words`)
+   211→   211→    } catch (e) {
+   212→   212→      const msg = e instanceof Error ? e.message : 'Transcription error'
+   213→   213→      setError(msg)
+   214→   214→      setStage('idle')
+   215→   215→      toast.error(msg)
+   216→   216→      return
+   217→   217→    }
+   218→   218→
+   219→   219→    // ---- Stage 2: generate notes ----
+   220→   220→    setStage('generating-notes')
+   221→   221→    setActiveTab('notes')
+   222→   222→    setVideoName(file.name)
+   223→   223→    try {
+   224→   224→      const res = await fetch('/api/generate-notes', {
+   225→   225→        method: 'POST',
+   226→   226→        headers: { 'Content-Type': 'application/json' },
+   227→   227→        body: JSON.stringify({
+   228→   228→          transcript: tr.transcript,
+   229→   229→          language,
+   230→   230→          videoName: file.name,
+   231→   231→          durationSec: tr.meta.durationSec,
+   232→   232→          sizeBytes: tr.meta.sizeBytes,
+   233→   233→          wordCount: tr.meta.wordCount,
+   234→   234→        }),
+   235→   235→      })
+   236→   236→      const data = await res.json()
+   237→   237→      if (!res.ok) throw new Error(data?.error || `Notes generation failed (${res.status})`)
+   238→   238→      const n = data as GenerateNotesResponse
+   239→   239→      setNotes(n)
+   240→   240→      setLoadedNoteId(n.noteId)
+   241→   241→      setStage('done')
+   242→   242→      setHistoryRefreshKey((k) => k + 1)
+   243→   243→      toast.success(
+   244→   244→        language === 'both'
+   245→   245→          ? 'Bilingual notes ready (EN + UR)'
+   246→   246→          : language === 'urdu'
+   247→   247→            ? 'Urdu notes ready (Nastaliq)'
+   248→   248→            : 'English notes ready',
+   249→   249→      )
+   250→   250→    } catch (e) {
+   251→   251→      const msg = e instanceof Error ? e.message : 'Notes generation error'
+   252→   252→      setError(msg)
+   253→   253→      setStage('idle')
+   254→   254→      toast.error(msg)
+   255→   255→    }
+   256→   256→  }, [file, language])
+   257→   257→
+   258→   258→  /** Regenerate just the notes from the existing transcript (no re-upload). */
+   259→   259→  const regenerateNotes = useCallback(async () => {
+   260→   260→    if (!transcript) return
+   261→   261→    setRegeneratingNotes(true)
+   262→   262→    setError(null)
+   263→   263→    setInfographicEn(null)
+   264→   264→    setInfographicUr(null)
+   265→   265→    setActiveTab('notes')
+   266→   266→    try {
+   267→   267→      const res = await fetch('/api/generate-notes', {
+   268→   268→        method: 'POST',
+   269→   269→        headers: { 'Content-Type': 'application/json' },
+   270→   270→        body: JSON.stringify({
+   271→   271→          transcript: transcript.transcript,
+   272→   272→          language,
+   273→   273→          videoName: transcript.meta.filename,
+   274→   274→          durationSec: transcript.meta.durationSec,
+   275→   275→          sizeBytes: transcript.meta.sizeBytes,
+   276→   276→          wordCount: transcript.meta.wordCount,
+   277→   277→        }),
+   278→   278→      })
+   279→   279→      const data = await res.json()
+   280→   280→      if (!res.ok) throw new Error(data?.error || `Notes generation failed (${res.status})`)
+   281→   281→      const n = data as GenerateNotesResponse
+   282→   282→      setNotes(n)
+   283→   283→      setLoadedNoteId(n.noteId)
+   284→   284→      setVideoName(transcript.meta.filename)
+   285→   285→      setHistoryRefreshKey((k) => k + 1)
+   286→   286→      toast.success('Notes regenerated')
+   287→   287→    } catch (e) {
+   288→   288→      const msg = e instanceof Error ? e.message : 'Notes regeneration error'
+   289→   289→      setError(msg)
+   290→   290→      toast.error(msg)
+   291→   291→    } finally {
+   292→   292→      setRegeneratingNotes(false)
+   293→   293→    }
+   294→   294→  }, [transcript, language])
+   295→   295→
+   296→   296→  const generateInfographic = useCallback(async () => {
+   297→   297→    if (!notes) return
+   298→   298→    setInfographicLoading(true)
+   299→   299→    setError(null)
+   300→   300→    try {
+   301→   301→      const res = await fetch('/api/generate-infographic', {
+   302→   302→        method: 'POST',
+   303→   303→        headers: { 'Content-Type': 'application/json' },
+   304→   304→        body: JSON.stringify({
+   305→   305→          english: notes.english?.structured,
+   306→   306→          urdu: notes.urdu?.structured,
+   307→   307→          noteId: notes.noteId ?? loadedNoteId,
+   308→   308→          theme,
+   309→   309→        }),
+   310→   310→      })
+   311→   311→      const data = await res.json()
+   312→   312→      if (!res.ok) throw new Error(data?.error || `Infographic failed (${res.status})`)
+   313→   313→      const r = data as GenerateInfographicResponse
+   314→   314→      setInfographicEn(r.english)
+   315→   315→      setInfographicUr(r.urdu)
+   316→   316→      setHistoryRefreshKey((k) => k + 1)
+   317→   317→      setActiveTab('infographic')
+   318→   318→      toast.success(`Infographic rendered · ${theme}`)
+   319→   319→    } catch (e) {
+   320→   320→      const msg = e instanceof Error ? e.message : 'Infographic error'
+   321→   321→      setError(msg)
+   322→   322→      toast.error(msg)
+   323→   323→    } finally {
+   324→   324→      setInfographicLoading(false)
+   325→   325→    }
+   326→   326→  }, [notes, theme, loadedNoteId])
+   327→   327→
+   328→   328→  /** Load a historical note's full detail back into the workspace. */
+   329→   329→  const loadHistoryNote = useCallback(async (id: string) => {
+   330→   330→    setError(null)
+   331→   331→    try {
+   332→   332→      const res = await fetch(`/api/notes/${id}`)
+   333→   333→      const data = await res.json()
+   334→   334→      if (!res.ok) throw new Error(data?.error || `Load failed (${res.status})`)
+   335→   335→      const d = data as NoteDetailResponse
+   336→   336→      const n = d.note
+   337→   337→      const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
+   338→   338→      setTranscript({
+   339→   339→        transcript: n.transcript,
+   340→   340→        meta: {
+   341→   341→          filename: n.videoName,
+   342→   342→          sizeBytes: n.sizeBytes ?? 0,
+   343→   343→          durationSec: n.durationSec,
+   344→   344→          wordCount,
+   345→   345→        },
+   346→   346→      })
+   347→   347→      setNotes({
+   348→   348→        noteId: n.id,
+   349→   349→        language: n.language,
+   350→   350→        english: n.english,
+   351→   351→        urdu: n.urdu,
+   352→   352→      })
+   353→   353→      setInfographicEn(n.infographicEn)
+   354→   354→      setInfographicUr(n.infographicUr)
+   355→   355→      setLoadedNoteId(n.id)
+   356→   356→      setVideoName(n.videoName)
+   357→   357→      setStage('done')
+   358→   358→      setFile(null)
+   359→   359→      setActiveTab('notes')
+   360→   360→      toast.success(`Loaded: ${n.videoName}`)
+   361→   361→    } catch (e) {
+   362→   362→      const msg = e instanceof Error ? e.message : 'Load error'
+   363→   363→      setError(msg)
+   364→   364→      toast.error(msg)
+   365→   365→    }
+   366→   366→  }, [])
+   367→   367→
+   368→   368→  const stageIndex = (() => {
+   369→   369→    if (stage === 'idle') return -1
+   370→   370→    if (stage === 'transcribing') return 0
+   371→   371→    if (stage === 'generating-notes') return 1
+   372→   372→    if (stage === 'done') return 2
+   373→   373→    return 2
+   374→   374→  })()
+   375→   375→  const infographicDone = !!(infographicEn || infographicUr)
+   376→   376→
+   377→   377→  /** After inline-edit save: update notes state + clear stale infographics. */
+   378→   378→  const handleNotesSaved = useCallback((updated: NoteDetail) => {
+   379→   379→    setNotes({
+   380→   380→      noteId: updated.id,
+   381→   381→      language: updated.language,
+   382→   382→      english: updated.english,
+   383→   383→      urdu: updated.urdu,
+   384→   384→    })
+   385→   385→    // Edited notes no longer match the previously-rendered infographic, so clear it.
+   386→   386→    setInfographicEn(null)
+   387→   387→    setInfographicUr(null)
+   388→   388→    setHistoryRefreshKey((k) => k + 1)
+   389→   389→    toast.success('Notes saved — regenerate the infographic to reflect edits.')
+   390→   390→  }, [])
+   391→   391→
+   392→   392→  /** After delete: if the currently-loaded note was among the deleted, reset the workspace. */
+   393→   393→  const handleNotesDeleted = useCallback((deletedIds: string[]) => {
+   394→   394→    if (loadedNoteId && deletedIds.includes(loadedNoteId)) {
+   395→   395→      reset()
+   396→   396→      toast.info('Cleared the workspace — the loaded note was deleted.')
+   397→   397→    }
+   398→   398→  }, [loadedNoteId, reset])
+   399→   399→
+   400→   400→  return (
+   401→   401→    <div className="flex min-h-screen flex-col bg-background bg-brand-hero">
+   402→   402→      {/* ---------------- Header ---------------- */}
+   403→   403→      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+   404→   404→        <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
+   405→   405→          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-sm">
+   406→   406→            <Film className="h-5 w-5" />
+   407→   407→          </div>
+   408→   408→          <div className="leading-none">
+   409→   409→            <h1 className="text-lg font-bold tracking-tight">
+   410→   410→              Reel <span className="text-muted-foreground">→</span>{' '}
+   411→   411→              <span className="text-gradient-brand">Notes</span>
+   412→   412→            </h1>
+   413→   413→            <p className="text-[11px] text-muted-foreground">Bilingual video notes + infographic generator</p>
+   414→   414→          </div>
+   415→   415→          <div className="ml-auto flex items-center gap-1.5">
+   416→   416→            {sharedMode && (
+   417→   417→              <Badge variant="outline" className="mr-1 gap-1 border-amber-500/40 text-amber-700">
+   418→   418→                <Eye className="h-3 w-3" /> Shared view
+   419→   419→              </Badge>
+   420→   420→            )}
+   421→   421→            {notes && !sharedMode && (
+   422→   422→              <ShareButton noteId={notes.noteId ?? loadedNoteId} videoName={videoName} variant="labeled" />
+   423→   423→            )}
+   424→   424→            <Button
+   425→   425→              variant="ghost"
+   426→   426→              size="icon"
+   427→   427→              className="h-9 w-9"
+   428→   428→              onClick={() => setShortcutsOpen(true)}
+   429→   429→              aria-label="Keyboard shortcuts"
+   430→   430→              title="Keyboard shortcuts (⌘K)"
+   431→   431→            >
+   432→   432→              <Keyboard className="h-4 w-4" />
+   433→   433→            </Button>
+   434→   434→            <ThemeToggle />
+   435→   435→            <Badge variant="outline" className="hidden gap-1 border-emerald-500/30 text-emerald-700 sm:flex">
+   436→   436→              <Sparkles className="h-3 w-3" /> v3
+   437→   437→            </Badge>
+   438→   438→            <a
+   439→   439→              href="https://github.com"
+   440→   440→              target="_blank"
+   441→   441→              rel="noreferrer"
+   442→   442→              className="hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
+   443→   443→              aria-label="Source"
+   444→   444→            >
+   445→   445→              <Github className="h-4 w-4" />
+   446→   446→            </a>
+   447→   447→          </div>
+   448→   448→        </div>
+   449→   449→      </header>
+   450→   450→
+   451→   451→      {/* ---------------- Hero (hidden in shared view) ---------------- */}
+   452→   452→      {!sharedMode && (
+   453→   453→      <section className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6">
+   454→   454→        <div className="max-w-2xl">
+   455→   455→          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30">
+   456→   456→            <Sparkles className="h-3 w-3" /> Whisper transcription · Claude-style summarization
+   457→   457→          </span>
+   458→   458→          <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+   459→   459→            Turn any video into <span className="text-gradient-brand">bilingual notes</span> & a shareable infographic.
+   460→   460→          </h2>
+   461→   461→          <p className="mt-2 text-sm text-muted-foreground sm:text-base">
+   462→   462→            Upload a reel, pick English, Urdu (proper Nastaliq script), or both — get clean Markdown notes and an
+   463→   463→            Instagram-friendly PNG infographic with correct RTL text shaping.
+   464→   464→          </p>
+   465→   465→        </div>
+   466→   466→
+   467→   467→        {/* Feature strip */}
+   468→   468→        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+   469→   469→          <FeatureChip icon={<Languages className="h-4 w-4" />} title="Bilingual" sub="EN · UR · Both" />
+   470→   470→          <FeatureChip icon={<Wand2 className="h-4 w-4" />} title="3 themes" sub="Emerald · Midnight · Sunrise" />
+   471→   471→          <FeatureChip icon={<ImageIcon className="h-4 w-4" />} title="PNG 1080×1350" sub="Instagram-ready" />
+   472→   472→          <FeatureChip icon={<ShieldCheck className="h-4 w-4" />} title="History + Share" sub="Reload · Public links" />
+   473→   473→        </div>
+   474→   474→      </section>
+   475→   475→      )}
+   476→   476→
+   477→   477→      {/* Shared-view banner */}
+   478→   478→      {sharedMode && (
+   479→   479→        <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
+   480→   480→          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-50/60 px-4 py-3 dark:bg-amber-950/20">
+   481→   481→            <div className="flex items-center gap-2 text-sm">
+   482→   482→              <Eye className="h-4 w-4 text-amber-600" />
+   483→   483→              <span className="font-semibold">You're viewing a shared note</span>
+   484→   484→              <span className="text-muted-foreground">— read-only. Download buttons still work.</span>
+   485→   485→            </div>
+   486→   486→            <Button
+   487→   487→              variant="outline"
+   488→   488→              size="sm"
+   489→   489→              className="gap-1.5"
+   490→   490→              onClick={() => {
+   491→   491→                window.location.href = window.location.origin
+   492→   492→              }}
+   493→   493→            >
+   494→   494→              <Film className="h-3.5 w-3.5" />
+   495→   495→              Back to app
+   496→   496→            </Button>
+   497→   497→          </div>
+   498→   498→        </section>
+   499→   499→      )}
+   500→   500→
+   501→   501→      {/* ---------------- Main ---------------- */}
+   502→   502→      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+   503→   503→        <div className="grid gap-6 lg:grid-cols-5">
+   504→   504→          {/* Left: config (hidden in shared view) */}
+   505→   505→          {!sharedMode && (
+   506→   506→          <div className="space-y-5 lg:col-span-2">
+   507→   507→            <Card className="shadow-sm">
+   508→   508→              <CardHeader className="pb-4">
+   509→   509→                <CardTitle className="flex items-center gap-2 text-base">
+   510→   510→                  <Film className="h-4 w-4 text-emerald-600" /> 1 · Upload video
+   511→   511→                </CardTitle>
+   512→   512→                <CardDescription className="text-xs">
+   513→   513→                  Drop a short clip, talk, or reel. Audio is extracted with ffmpeg and transcribed via ASR.
+   514→   514→                </CardDescription>
+   515→   515→              </CardHeader>
+   516→   516→              <CardContent className="space-y-4">
+   517→   517→                <UploadZone file={file} onFile={handleFile} disabled={busy} />
+   518→   518→                <LanguageSelector value={language} onChange={setLanguage} disabled={busy} />
+   519→   519→
+   520→   520→                <div className="flex flex-col gap-2">
+   521→   521→                  <Button
+   522→   522→                    onClick={runPipeline}
+   523→   523→                    disabled={!file || busy}
+   524→   524→                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm hover:from-emerald-700 hover:to-emerald-800"
+   525→   525→                    size="lg"
+   526→   526→                  >
+   527→   527→                    {busy ? (
+   528→   528→                      <>
+   529→   529→                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+   530→   530→                        {stage === 'transcribing'
+   531→   531→                          ? 'Transcribing…'
+   532→   532→                          : stage === 'generating-notes'
+   533→   533→                            ? 'Generating notes…'
+   534→   534→                            : regeneratingNotes
+   535→   535→                              ? 'Regenerating…'
+   536→   536→                              : 'Working…'}
+   537→   537→                      </>
+   538→   538→                    ) : (
+   539→   539→                      <>
+   540→   540→                        <Play className="mr-2 h-4 w-4" />
+   541→   541→                        Transcribe &amp; generate notes
+   542→   542→                      </>
+   543→   543→                    )}
+   544→   544→                  </Button>
+   545→   545→
+   546→   546→                  {transcript && !busy && (
+   547→   547→                    <Button
+   548→   548→                      onClick={regenerateNotes}
+   549→   549→                      variant="outline"
+   550→   550→                      className="w-full border-emerald-500/40 text-emerald-700 hover:bg-emerald-50"
+   551→   551→                    >
+   552→   552→                      <RotateCw className="mr-2 h-3.5 w-3.5" />
+   553→   553→                      Regenerate notes only
+   554→   554→                    </Button>
+   555→   555→                  )}
+   556→   556→                </div>
+   557→   557→              </CardContent>
+   558→   558→            </Card>
+   559→   559→
+   560→   560→            {/* Pipeline progress */}
+   561→   561→            <Card className="shadow-sm">
+   562→   562→              <CardHeader className="pb-3">
+   563→   563→                <CardTitle className="text-sm">Pipeline</CardTitle>
+   564→   564→              </CardHeader>
+   565→   565→              <CardContent>
+   566→   566→                <ol className="space-y-2.5">
+   567→   567→                  {STEPS.map((s, i) => {
+   568→   568→                    const done = i < stageIndex || (s.key === 'infographic' && infographicDone)
+   569→   569→                    const activeNow = i === stageIndex || (s.key === 'infographic' && infographicLoading)
+   570→   570→                    return (
+   571→   571→                      <li key={s.key} className="flex items-center gap-2.5 text-sm">
+   572→   572→                        {done ? (
+   573→   573→                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+   574→   574→                        ) : activeNow ? (
+   575→   575→                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-600" />
+   576→   576→                        ) : (
+   577→   577→                          <Circle className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+   578→   578→                        )}
+   579→   579→                        <span className={done || activeNow ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+   580→   580→                          {s.label}
+   581→   581→                        </span>
+   582→   582→                        <span className="font-urdu text-xs text-muted-foreground" dir="rtl">
+   583→   583→                          {s.urdu}
+   584→   584→                        </span>
+   585→   585→                        {s.key === 'infographic' && !done && !activeNow && notes && (
+   586→   586→                          <span className="ml-auto text-[10px] text-muted-foreground">optional</span>
+   587→   587→                        )}
+   588→   588→                      </li>
+   589→   589→                    )
+   590→   590→                  })}
+   591→   591→                </ol>
+   592→   592→              </CardContent>
+   593→   593→            </Card>
+   594→   594→
+   595→   595→            {error && (
+   596→   596→              <Alert variant="destructive">
+   597→   597→                <AlertCircle className="h-4 w-4" />
+   598→   598→                <AlertTitle>Something went wrong</AlertTitle>
+   599→   599→                <AlertDescription className="break-words">{error}</AlertDescription>
+   600→   600→              </Alert>
+   601→   601→            )}
+   602→   602→          </div>
+   603→   603→          )}
+   604→   604→
+   605→   605→          {/* Right: results (full-width in shared view) */}
+   606→   606→          <div className={sharedMode ? 'lg:col-span-5' : 'lg:col-span-3'}>
+   607→   607→            <Card className="shadow-sm">
+   608→   608→              <CardHeader className="pb-3">
+   609→   609→                <Tabs value={activeTab} onValueChange={setActiveTab}>
+   610→   610→                  <div className="flex flex-wrap items-center justify-between gap-3">
+   611→   611→                    <CardTitle className="flex items-center gap-2 text-base">
+   612→   612→                      Results
+   613→   613→                      {loadedNoteId && (
+   614→   614→                        <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+   615→   615→                          from history
+   616→   616→                        </Badge>
+   617→   617→                      )}
+   618→   618→                    </CardTitle>
+   619→   619→                    <TabsList>
+   620→   620→                      <TabsTrigger value="notes" disabled={!notes}>
+   621→   621→                        <FileText className="mr-1.5 h-3.5 w-3.5" /> Notes
+   622→   622→                      </TabsTrigger>
+   623→   623→                      <TabsTrigger value="transcript" disabled={!transcript}>
+   624→   624→                        <ScrollText className="mr-1.5 h-3.5 w-3.5" /> Transcript
+   625→   625→                      </TabsTrigger>
+   626→   626→                      <TabsTrigger value="infographic" disabled={!notes}>
+   627→   627→                        <ImageIcon className="mr-1.5 h-3.5 w-3.5" /> Infographic
+   628→   628→                      </TabsTrigger>
+   629→   629→                    </TabsList>
+   630→   630→                  </div>
+   631→   631→
+   632→   632→                  <TabsContent value="notes" className="mt-4">
+   633→   633→                    {notes ? (
+   634→   634→                      <div className="animate-rn-fade-up">
+   635→   635→                        <NotesView
+   636→   636→                          english={notes.english}
+   637→   637→                          urdu={notes.urdu}
+   638→   638→                          infographicEn={infographicEn}
+   639→   639→                          infographicUr={infographicUr}
+   640→   640→                          videoName={videoName}
+   641→   641→                          noteId={notes.noteId ?? loadedNoteId}
+   642→   642→                          onEdit={() => setEditorOpen(true)}
+   643→   643→                          readOnly={sharedMode}
+   644→   644→                        />
+   645→   645→                      </div>
+   646→   646→                    ) : (
+   647→   647→                      <EmptyState
+   648→   648→                        icon={<FileText className="h-8 w-8" />}
+   649→   649→                        title="No notes yet"
+   650→   650→                        desc="Upload a video and run the pipeline to generate structured notes."
+   651→   651→                      />
+   652→   652→                    )}
+   653→   653→                  </TabsContent>
+   654→   654→
+   655→   655→                  <TabsContent value="transcript" className="mt-4">
+   656→   656→                    {transcript ? (
+   657→   657→                      <div className="animate-rn-fade-up">
+   658→   658→                        <TranscriptView transcript={transcript.transcript} meta={transcript.meta} />
+   659→   659→                      </div>
+   660→   660→                    ) : (
+   661→   661→                      <EmptyState
+   662→   662→                        icon={<ScrollText className="h-8 w-8" />}
+   663→   663→                        title="No transcript yet"
+   664→   664→                        desc="The transcribed text will appear here after processing."
+   665→   665→                      />
+   666→   666→                    )}
+   667→   667→                  </TabsContent>
+   668→   668→
+   669→   669→                  <TabsContent value="infographic" className="mt-4">
+   670→   670→                    {notes ? (
+   671→   671→                      <div className="animate-rn-fade-up">
+   672→   672→                        <InfographicView
+   673→   673→                          english={infographicEn}
+   674→   674→                          urdu={infographicUr}
+   675→   675→                          loading={infographicLoading}
+   676→   676→                          canGenerate={!!notes}
+   677→   677→                          onGenerate={generateInfographic}
+   678→   678→                          theme={theme}
+   679→   679→                          onThemeChange={setTheme}
+   680→   680→                        />
+   681→   681→                      </div>
+   682→   682→                    ) : (
+   683→   683→                      <EmptyState
+   684→   684→                        icon={<ImageIcon className="h-8 w-8" />}
+   685→   685→                        title="No notes to visualize"
+   686→   686→                        desc="Generate notes first, then turn them into a PNG infographic."
+   687→   687→                      />
+   688→   688→                    )}
+   689→   689→                  </TabsContent>
+   690→   690→                </Tabs>
+   691→   691→              </CardHeader>
+   692→   692→            </Card>
+   693→   693→          </div>
+   694→   694→        </div>
+   695→   695→
+   696→   696→        {/* History (hidden in shared view) */}
+   697→   697→        {!sharedMode && (
+   698→   698→          <div className="mt-6">
+   699→   699→            <HistoryPanel
+   700→   700→              onLoad={loadHistoryNote}
+   701→   701→              activeId={loadedNoteId}
+   702→   702→              refreshKey={historyRefreshKey}
+   703→   703→              onDeleted={handleNotesDeleted}
+   704→   704→              onCompare={(aId, bId) => {
+   705→   705→                setCompareIds({ a: aId, b: bId })
+   706→   706→                setCompareOpen(true)
+   707→   707→              }}
+   708→   708→            />
+   709→   709→          </div>
+   710→   710→        )}
+   711→   711→      </main>
+   712→   712→
+   713→   713→      {/* ---------------- Footer ---------------- */}
+   714→   714→      <footer className="mt-auto border-t border-border/60 bg-background/60">
+   715→   715→        <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:px-6">
+   716→   716→          <p className="flex items-center gap-1.5">
+   717→   717→            <Zap className="h-3 w-3 text-amber-500" />
+   718→   718→            Reel → Notes · Next.js 16 · Playwright + Noto Nastaliq Urdu · ffmpeg + z-ai ASR/LLM
+   719→   719→          </p>
+   720→   720→          <p className="inline-flex items-center gap-1">
+   721→   721→            Built with <Heart className="h-3 w-3 fill-red-500 text-red-500" /> for bilingual creators
+   722→   722→          </p>
+   723→   723→        </div>
+   724→   724→      </footer>
+   725→   725→
+   726→   726→      {/* Inline note editor modal */}
+   727→   727→      <NoteEditor
+   728→   728→        open={editorOpen}
+   729→   729→        onOpenChange={setEditorOpen}
+   730→   730→        english={notes?.english}
+   731→   731→        urdu={notes?.urdu}
+   732→   732→        noteId={notes?.noteId ?? loadedNoteId}
+   733→   733→        videoName={videoName}
+   734→   734→        onSaved={handleNotesSaved}
+   735→   735→      />
+   736→   736→
+   737→   737→      {/* Multi-note comparison dialog */}
+   738→   738→      <CompareDialog
+   739→   739→        open={compareOpen}
+   740→   740→        onOpenChange={setCompareOpen}
+   741→   741→        aId={compareIds.a}
+   742→   742→        bId={compareIds.b}
+   743→   743→      />
+   744→   744→
+   745→   745→      {/* Keyboard shortcuts dialog */}
+   746→   746→      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+   747→   747→        <DialogContent className="sm:max-w-md">
+   748→   748→          <DialogHeader>
+   749→   749→            <DialogTitle className="flex items-center gap-2">
+   750→   750→              <Keyboard className="h-4 w-4 text-emerald-600" />
+   751→   751→              Keyboard shortcuts
+   752→   752→            </DialogTitle>
+   753→   753→            <DialogDescription>Press these anywhere outside of text fields.</DialogDescription>
+   754→   754→          </DialogHeader>
+   755→   755→          <div className="space-y-2.5">
+   756→   756→            {[
+   757→   757→              { keys: ['⌘', 'G'], action: 'Generate / regenerate infographic' },
+   758→   758→              { keys: ['⌘', 'E'], action: 'Edit notes' },
+   759→   759→              { keys: ['⌘', '1'], action: 'Switch to Notes tab' },
+   760→   760→              { keys: ['⌘', '2'], action: 'Switch to Transcript tab' },
+   761→   761→              { keys: ['⌘', '3'], action: 'Switch to Infographic tab' },
+   762→   762→              { keys: ['⌘', 'K'], action: 'Toggle this shortcuts dialog' },
+   763→   763→            ].map((s) => (
+   764→   764→              <div key={s.action} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+   765→   765→                <span className="text-sm">{s.action}</span>
+   766→   766→                <span className="flex shrink-0 gap-1">
+   767→   767→                  {s.keys.map((k) => (
+   768→   768→                    <kbd
+   769→   769→                      key={k}
+   770→   770→                      className="inline-flex h-6 min-w-6 items-center justify-center rounded border border-border bg-background px-1.5 font-mono text-xs font-semibold shadow-sm"
+   771→   771→                    >
+   772→   772→                      {k}
+   773→   773→                    </kbd>
+   774→   774→                  ))}
+   775→   775→                </span>
+   776→   776→              </div>
+   777→   777→            ))}
+   778→   778→          </div>
+   779→   779→          <DialogFooter>
+   780→   780→            <Button onClick={() => setShortcutsOpen(false)}>Got it</Button>
+   781→   781→          </DialogFooter>
+   782→   782→        </DialogContent>
+   783→   783→      </Dialog>
+   784→   784→    </div>
+   785→   785→  )
+   786→   786→}
+   787→   787→
+   788→   788→function FeatureChip({ icon, title, sub }: { icon: React.ReactNode; title: string; sub: string }) {
+   789→   789→  return (
+   790→   790→    <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 backdrop-blur-sm">
+   791→   791→      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+   792→   792→        {icon}
+   793→   793→      </div>
+   794→   794→      <div className="min-w-0 leading-tight">
+   795→   795→        <div className="text-xs font-semibold">{title}</div>
+   796→   796→        <div className="truncate text-[10px] text-muted-foreground">{sub}</div>
+   797→   797→      </div>
+   798→   798→    </div>
+   799→   799→  )
+   800→   800→}
+   801→   801→
+   802→   802→function EmptyState({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+   803→   803→  return (
+   804→   804→    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-16 text-center">
+   805→   805→      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+   806→   806→        {icon}
+   807→   807→      </div>
+   808→   808→      <p className="text-sm font-semibold">{title}</p>
+   809→   809→      <p className="max-w-sm text-xs text-muted-foreground">{desc}</p>
+   810→   810→    </div>
+   811→   811→  )
+   812→   812→}
+   813→   813→
+   814→   814→// Keep the Download import referenced (used by child components via re-export pattern)
+   815→   815→void Download
+   816→   816→

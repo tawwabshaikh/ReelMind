@@ -1,7 +1,6 @@
 'use client'
 
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { Languages, Type, Columns2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { Language } from '@/lib/types'
 
 interface Props {
@@ -10,49 +9,50 @@ interface Props {
   disabled?: boolean
 }
 
-const OPTIONS: { value: Language; label: string; urdu: string; icon: React.ReactNode; desc: string }[] = [
-  { value: 'english', label: 'English', urdu: 'انگریزی', icon: <Type className="h-4 w-4" />, desc: 'Notes in English only' },
-  { value: 'urdu', label: 'Urdu', urdu: 'اردو', icon: <Languages className="h-4 w-4" />, desc: 'Proper Nastaliq script' },
-  { value: 'both', label: 'Both', urdu: 'دونوں', icon: <Columns2 className="h-4 w-4" />, desc: 'EN + UR, two versions' },
+const OPTIONS: { value: Language; label: string }[] = [
+  { value: 'english', label: 'English' },
+  { value: 'urdu', label: 'اردو' },
+  { value: 'both', label: 'Both' },
 ]
 
 export function LanguageSelector({ value, onChange, disabled }: Props) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-semibold text-foreground">Output language</label>
-        <span className="text-xs text-muted-foreground">Urdu renders in Nastaliq script</span>
-      </div>
-      <ToggleGroup
-        type="single"
-        value={value}
-        onValueChange={(v) => {
-          if (v) onChange(v as Language)
-        }}
-        disabled={disabled}
-        className="grid w-full grid-cols-3 gap-2 rounded-xl bg-muted/50 p-1.5"
+    <div className="space-y-2">
+      <label className="text-xs font-medium text-muted-foreground">Output language</label>
+      <div
+        className={cn(
+          'inline-flex w-full rounded-lg border border-border bg-muted/40 p-0.5',
+          disabled && 'pointer-events-none opacity-50',
+        )}
+        role="radiogroup"
+        aria-label="Output language"
       >
         {OPTIONS.map((opt) => {
           const active = value === opt.value
+          const isUrdu = opt.value === 'urdu'
           return (
-            <ToggleGroupItem
+            <button
               key={opt.value}
-              value={opt.value}
-              aria-label={opt.label}
-              className="flex h-auto flex-col items-center gap-1 rounded-lg border border-transparent py-3 data-[state=on]:border-emerald-500/40 data-[state=on]:bg-background data-[state=on]:shadow-sm"
+              type="button"
+              role="radio"
+              aria-checked={active}
+              disabled={disabled}
+              onClick={() => onChange(opt.value)}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all',
+                active
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
             >
-              <span className={`flex h-8 w-8 items-center justify-center rounded-full ${active ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`}>
-                {opt.icon}
+              <span className={isUrdu ? 'font-urdu text-base leading-none' : ''} dir={isUrdu ? 'rtl' : 'ltr'}>
+                {opt.label}
               </span>
-              <span className="text-sm font-semibold leading-none">{opt.label}</span>
-              <span className="font-urdu text-base text-muted-foreground leading-none" dir="rtl">{opt.urdu}</span>
-            </ToggleGroupItem>
+              {active && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+            </button>
           )
         })}
-      </ToggleGroup>
-      <p className="text-xs text-muted-foreground">
-        {OPTIONS.find((o) => o.value === value)?.desc}
-      </p>
+      </div>
     </div>
   )
 }
