@@ -42,12 +42,13 @@ export async function POST(req: NextRequest) {
     // Permanent delete: fetch files, clean up PNGs, then remove rows.
     const rows = await db.note.findMany({
       where: { id: { in: ids } },
-      select: { id: true, infographicEn: true, infographicUr: true },
+      select: { id: true, infographicEn: true, infographicUr: true, infographicHi: true },
     })
     const files: string[] = []
     for (const r of rows) {
       if (r.infographicEn) files.push(r.infographicEn)
       if (r.infographicUr) files.push(r.infographicUr)
+      if (r.infographicHi) files.push(r.infographicHi)
     }
     await Promise.all(
       files.map(async (fn) => {

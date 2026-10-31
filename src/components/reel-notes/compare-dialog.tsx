@@ -47,7 +47,7 @@ function TagBadges({ tags, tagColors }: { tags: string[]; tagColors?: Record<str
 }
 
 function NoteColumn({ note, side }: { note: CompareNote; side: 'A' | 'B' }) {
-  const version = note.english || note.urdu
+  const version = note.english || note.urdu || note.hinglish
   if (!version) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed p-8 text-center">
@@ -122,13 +122,16 @@ function NoteColumn({ note, side }: { note: CompareNote; side: 'A' | 'B' }) {
         )}
 
         {/* Infographic thumbnails */}
-        {(note.infographicEn || note.infographicUr) && (
+        {(note.infographicEn || note.infographicUr || note.infographicHi) && (
           <div className="flex gap-2 border-t pt-3">
             {note.infographicEn && (
               <img src={note.infographicEn.url} alt="EN infographic" className="h-20 w-auto rounded border object-cover" />
             )}
             {note.infographicUr && (
               <img src={note.infographicUr.url} alt="UR infographic" className="h-20 w-auto rounded border object-cover" />
+            )}
+            {note.infographicHi && (
+              <img src={note.infographicHi.url} alt="Hinglish infographic" className="h-20 w-auto rounded border object-cover" />
             )}
           </div>
         )}
@@ -178,8 +181,8 @@ function DiffRowCard({ row }: { row: DiffRow }) {
 }
 
 function DiffView({ data }: { data: CompareResponse }) {
-  const aVersion = data.a.english || data.a.urdu
-  const bVersion = data.b.english || data.b.urdu
+  const aVersion = data.a.english || data.a.urdu || data.a.hinglish
+  const bVersion = data.b.english || data.b.urdu || data.b.hinglish
   if (!aVersion || !bVersion) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -233,6 +236,8 @@ export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
 
   useEffect(() => {
     if (!open || !aId || !bId) {
+      // Clear cached comparison data when the dialog closes or loses its ids.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setData(null)
       setError(null)
       return
@@ -257,8 +262,8 @@ export function CompareDialog({ open, onOpenChange, aId, bId }: Props) {
 
   const sharedTags = (() => {
     if (!data) return []
-    const aTags = new Set(data.a.english?.structured.tags || data.a.urdu?.structured.tags || [])
-    const bTags = data.b.english?.structured.tags || data.b.urdu?.structured.tags || []
+    const aTags = new Set(data.a.english?.structured.tags || data.a.urdu?.structured.tags || data.a.hinglish?.structured.tags || [])
+    const bTags = data.b.english?.structured.tags || data.b.urdu?.structured.tags || data.b.hinglish?.structured.tags || []
     return bTags.filter((t) => aTags.has(t))
   })()
 

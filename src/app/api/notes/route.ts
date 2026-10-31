@@ -37,8 +37,10 @@ export async function GET(req: NextRequest) {
         language: true,
         notesEn: true,
         notesUr: true,
+        notesHi: true,
         infographicEn: true,
         infographicUr: true,
+        infographicHi: true,
         durationSec: true,
         wordCount: true,
         createdAt: true,
@@ -48,7 +50,8 @@ export async function GET(req: NextRequest) {
     const normalised = rows.map((r) => {
       const enTags = extractTags(r.notesEn)
       const urTags = extractTags(r.notesUr)
-      const tags = Array.from(new Set([...enTags, ...urTags])).slice(0, 12)
+      const hiTags = extractTags(r.notesHi)
+      const tags = Array.from(new Set([...enTags, ...urTags, ...hiTags])).slice(0, 12)
       return {
         id: r.id,
         videoName: r.videoName,
@@ -57,10 +60,13 @@ export async function GET(req: NextRequest) {
         deletedAt: r.deletedAt,
         hasEnglishNotes: !!r.notesEn,
         hasUrduNotes: !!r.notesUr,
+        hasHinglishNotes: !!r.notesHi,
         hasEnglishInfographic: !!r.infographicEn,
         hasUrduInfographic: !!r.infographicUr,
+        hasHinglishInfographic: !!r.infographicHi,
         infographicEnUrl: r.infographicEn ? `/generated/${r.infographicEn}` : null,
         infographicUrUrl: r.infographicUr ? `/generated/${r.infographicUr}` : null,
+        infographicHiUrl: r.infographicHi ? `/generated/${r.infographicHi}` : null,
         tags,
         durationSec: r.durationSec,
         wordCount: r.wordCount,

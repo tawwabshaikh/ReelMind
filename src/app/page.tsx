@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { UploadZone } from '@/components/reel-notes/upload-zone'
+import { UploadZone, type VideoSourceMode } from '@/components/reel-notes/upload-zone'
 import { LanguageSelector } from '@/components/reel-notes/language-selector'
 import { NotesView } from '@/components/reel-notes/notes-view'
 import { TranscriptView } from '@/components/reel-notes/transcript-view'
@@ -34,7 +34,7 @@ import { ShareButton } from '@/components/reel-notes/share-button'
 import { ReelMindLogo, ReelMindWordmark } from '@/components/reel-notes/reelmind-logo'
 import { safeJsonFetch } from '@/lib/safe-fetch'
 import type {
-  Language,
+  NoteLanguage,
   Theme,
   TranscribeResponse,
   GenerateNotesResponse,
@@ -55,7 +55,9 @@ const STEPS: { key: Stage | 'infographic'; label: string }[] = [
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null)
-  const [language, setLanguage] = useState<Language>('english')
+  const [sourceMode, setSourceMode] = useState<VideoSourceMode>('file')
+  const [videoUrl, setVideoUrl] = useState('')
+  const [language, setLanguage] = useState<NoteLanguage>('english')
   const [theme, setTheme] = useState<Theme>('emerald')
 
   const [stage, setStage] = useState<Stage>('idle')
@@ -66,6 +68,7 @@ export default function Home() {
 
   const [infographicEn, setInfographicEn] = useState<InfographicFile | null>(null)
   const [infographicUr, setInfographicUr] = useState<InfographicFile | null>(null)
+  const [infographicHi, setInfographicHi] = useState<InfographicFile | null>(null)
   const [infographicLoading, setInfographicLoading] = useState(false)
 
   const [activeTab, setActiveTab] = useState<string>('notes')
@@ -86,7 +89,6 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search)
     const shareId = params.get('share')
     if (!shareId) return
-    setSharedMode(true)
     ;(async () => {
       try {
         const { data, error } = await safeJsonFetch<NoteDetailResponse>(`/api/notes/${shareId}`)
@@ -94,6 +96,7 @@ export default function Home() {
         if (!data) throw new Error('Shared note not found')
         const d = data
         const n = d.note
+        setSharedMode(true)
         const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
         setTranscript({
           transcript: n.transcript,
@@ -106,60 +109,32 @@ export default function Home() {
         })
         setNotes({
           noteId: n.id,
-          language: n.language,
+          language: n.language === 'urdu' || n.language === 'hinglish' ? n.language : 'english',
           english: n.english,
           urdu: n.urdu,
+          hinglish: n.hinglish,
         })
         setInfographicEn(n.infographicEn)
         setInfographicUr(n.infographicUr)
+        setInfographicHi(n.infographicHi)
         setLoadedNoteId(n.id)
         setVideoName(n.videoName)
         setStage('done')
         setActiveTab('notes')
         toast.success(`Viewing shared note: ${n.videoName}`)
       } catch (e) {
+        setSharedMode(true)
         toast.error(e instanceof Error ? e.message : 'Failed to load shared note')
       }
     })()
   }, [])
-
-  // ---- Keyboard shortcuts ----
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        return
-      }
-      const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key === 'g' && notes && !infographicLoading) {
-        e.preventDefault()
-        generateInfographic()
-      } else if (mod && e.key === 'e' && notes && !sharedMode) {
-        e.preventDefault()
-        setEditorOpen(true)
-      } else if (mod && e.key === '1' && (transcript || notes)) {
-        e.preventDefault()
-        setActiveTab('notes')
-      } else if (mod && e.key === '2' && transcript) {
-        e.preventDefault()
-        setActiveTab('transcript')
-      } else if (mod && e.key === '3' && notes) {
-        e.preventDefault()
-        setActiveTab('infographic')
-      } else if (mod && e.key === 'k') {
-        e.preventDefault()
-        setShortcutsOpen((v) => !v)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [notes, transcript, infographicLoading, sharedMode])
 
   const reset = useCallback(() => {
     setTranscript(null)
     setNotes(null)
     setInfographicEn(null)
     setInfographicUr(null)
+    setInfographicHi(null)
     setError(null)
     setStage('idle')
     setLoadedNoteId(null)
@@ -169,14 +144,19 @@ export default function Home() {
   const handleFile = useCallback(
     (f: File | null) => {
       setFile(f)
+      setSourceMode('file')
       reset()
     },
     [reset],
   )
 
   const runPipeline = useCallback(async () => {
-    if (!file) {
-      toast.error('Please choose a video file first.')
+    if (sourceMode === 'file' && !file) {
+      toast.error('Choose a video file first.')
+      return
+    }
+    if (sourceMode === 'link' && !videoUrl.trim()) {
+      toast.error('Paste a direct video link first.')
       return
     }
     setError(null)
@@ -184,6 +164,7 @@ export default function Home() {
     setNotes(null)
     setInfographicEn(null)
     setInfographicUr(null)
+    setInfographicHi(null)
     setLoadedNoteId(null)
     setActiveTab('transcript')
 
@@ -192,7 +173,8 @@ export default function Home() {
     let tr: TranscribeResponse
     try {
       const fd = new FormData()
-      fd.append('video', file)
+      if (sourceMode === 'file' && file) fd.append('video', file)
+      else fd.append('url', videoUrl.trim())
       const { data, error } = await safeJsonFetch<TranscribeResponse>('/api/transcribe', { method: 'POST', body: fd })
       if (error) throw new Error(error)
       if (!data) throw new Error('Transcription returned no data')
@@ -210,7 +192,7 @@ export default function Home() {
     // ---- Stage 2: generate notes ----
     setStage('generating-notes')
     setActiveTab('notes')
-    setVideoName(file.name)
+    setVideoName(tr.meta.filename)
     try {
       const { data, error } = await safeJsonFetch<GenerateNotesResponse>('/api/generate-notes', {
         method: 'POST',
@@ -218,7 +200,7 @@ export default function Home() {
         body: JSON.stringify({
           transcript: tr.transcript,
           language,
-          videoName: file.name,
+          videoName: tr.meta.filename,
           durationSec: tr.meta.durationSec,
           sizeBytes: tr.meta.sizeBytes,
           wordCount: tr.meta.wordCount,
@@ -232,11 +214,11 @@ export default function Home() {
       setStage('done')
       setHistoryRefreshKey((k) => k + 1)
       toast.success(
-        language === 'both'
-          ? 'Bilingual notes ready (EN + UR)'
-          : language === 'urdu'
+        language === 'urdu'
             ? 'Urdu notes ready (Nastaliq)'
-            : 'English notes ready',
+            : language === 'hinglish'
+              ? 'Hinglish notes ready'
+              : 'English notes ready',
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Notes generation error'
@@ -244,7 +226,7 @@ export default function Home() {
       setStage('idle')
       toast.error(msg)
     }
-  }, [file, language])
+  }, [file, language, sourceMode, videoUrl])
 
   const regenerateNotes = useCallback(async () => {
     if (!transcript) return
@@ -252,6 +234,7 @@ export default function Home() {
     setError(null)
     setInfographicEn(null)
     setInfographicUr(null)
+    setInfographicHi(null)
     setActiveTab('notes')
     setVideoName(transcript.meta.filename)
     try {
@@ -294,6 +277,7 @@ export default function Home() {
         body: JSON.stringify({
           english: notes.english?.structured,
           urdu: notes.urdu?.structured,
+          hinglish: notes.hinglish?.structured,
           noteId: notes.noteId ?? loadedNoteId,
           theme,
         }),
@@ -303,6 +287,7 @@ export default function Home() {
       const r = data
       setInfographicEn(r.english)
       setInfographicUr(r.urdu)
+      setInfographicHi(r.hinglish)
       setHistoryRefreshKey((k) => k + 1)
       setActiveTab('infographic')
       toast.success('Infographic rendered')
@@ -314,6 +299,38 @@ export default function Home() {
       setInfographicLoading(false)
     }
   }, [notes, theme, loadedNoteId])
+
+  // ---- Keyboard shortcuts ----
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key === 'g' && notes && !infographicLoading) {
+        e.preventDefault()
+        generateInfographic()
+      } else if (mod && e.key === 'e' && notes && !sharedMode) {
+        e.preventDefault()
+        setEditorOpen(true)
+      } else if (mod && e.key === '1' && (transcript || notes)) {
+        e.preventDefault()
+        setActiveTab('notes')
+      } else if (mod && e.key === '2' && transcript) {
+        e.preventDefault()
+        setActiveTab('transcript')
+      } else if (mod && e.key === '3' && notes) {
+        e.preventDefault()
+        setActiveTab('infographic')
+      } else if (mod && e.key === 'k') {
+        e.preventDefault()
+        setShortcutsOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [notes, transcript, infographicLoading, sharedMode, generateInfographic])
 
   const loadHistoryNote = useCallback(async (id: string) => {
     setError(null)
@@ -335,12 +352,14 @@ export default function Home() {
       })
       setNotes({
         noteId: n.id,
-        language: n.language,
+        language: n.language === 'urdu' || n.language === 'hinglish' ? n.language : 'english',
         english: n.english,
         urdu: n.urdu,
+        hinglish: n.hinglish,
       })
       setInfographicEn(n.infographicEn)
       setInfographicUr(n.infographicUr)
+      setInfographicHi(n.infographicHi)
       setLoadedNoteId(n.id)
       setVideoName(n.videoName)
       setStage('done')
@@ -361,17 +380,19 @@ export default function Home() {
     if (stage === 'done') return 2
     return 2
   })()
-  const infographicDone = !!(infographicEn || infographicUr)
+  const infographicDone = !!(infographicEn || infographicUr || infographicHi)
 
   const handleNotesSaved = useCallback((updated: NoteDetail) => {
     setNotes({
       noteId: updated.id,
-      language: updated.language,
+      language: updated.language === 'urdu' || updated.language === 'hinglish' ? updated.language : 'english',
       english: updated.english,
       urdu: updated.urdu,
+      hinglish: updated.hinglish,
     })
     setInfographicEn(null)
     setInfographicUr(null)
+    setInfographicHi(null)
     setHistoryRefreshKey((k) => k + 1)
     toast.success('Notes saved — regenerate the infographic to reflect edits.')
   }, [])
@@ -399,7 +420,7 @@ export default function Home() {
       {/* ===================== Header ===================== */}
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
-          <ReelMindLogo size={26} />
+          <ReelMindLogo size={36} />
           <div className="flex items-baseline gap-2">
             <ReelMindWordmark className="text-base font-semibold tracking-tight" />
             <span className="hidden text-xs text-muted-foreground sm:inline">Video → Knowledge</span>
@@ -432,13 +453,13 @@ export default function Home() {
       {!sharedMode && (
         <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
           <div className="max-w-2xl">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              Turn videos into knowledge.
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              Turn every video into <span className="text-accent">knowledge.</span>
             </h2>
-            <p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
               Transcribe videos, generate structured notes, and create shareable visual summaries — in English or Urdu.
             </p>
-            <p className="mt-1 text-xs font-medium text-accent">
+            <p className="mt-2 text-xs font-semibold tracking-wide text-accent">
               Learn faster. Remember more.
             </p>
           </div>
@@ -484,26 +505,39 @@ export default function Home() {
 
       {/* ===================== Main workspace ===================== */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
-        <div className="grid gap-5 lg:grid-cols-5">
+        <div className="grid gap-5 lg:grid-cols-12">
           {/* -------- LEFT: Create (40%) -------- */}
           {!sharedMode && (
-            <div className="space-y-4 lg:col-span-2">
+            <div className="space-y-4 lg:col-span-5">
               {/* Create panel */}
-              <div className="rounded-lg border border-border bg-card p-5">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-foreground">Create</h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Turn a video into clear, useful knowledge.</p>
+              <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm sm:p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">Create your study guide</h3>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Choose a video source to get started.</p>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
-                  <UploadZone file={file} onFile={handleFile} disabled={busy} />
+                  <UploadZone
+                    file={file}
+                    onFile={handleFile}
+                    mode={sourceMode}
+                    onModeChange={setSourceMode}
+                    url={videoUrl}
+                    onUrlChange={setVideoUrl}
+                    disabled={busy}
+                  />
                   <LanguageSelector value={language} onChange={setLanguage} disabled={busy} />
 
                   <Button
                     onClick={runPipeline}
-                    disabled={!file || busy}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                    size="default"
+                    disabled={(sourceMode === 'file' ? !file : !videoUrl.trim()) || busy}
+                    className="h-11 w-full rounded-xl bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                    size="lg"
                   >
                     {busy ? (
                       <>
@@ -574,8 +608,8 @@ export default function Home() {
           )}
 
           {/* -------- RIGHT: Results (60%) -------- */}
-          <div className={sharedMode ? 'lg:col-span-5' : 'lg:col-span-3'}>
-            <div className="rounded-lg border border-border bg-card">
+          <div className={sharedMode ? 'lg:col-span-12' : 'lg:col-span-7'}>
+            <div className="min-h-[440px] rounded-2xl border border-border/80 bg-card shadow-sm">
               {/* Results header */}
               <div className="flex items-center justify-between border-b border-border px-5 py-3">
                 <div className="flex items-center gap-2">
@@ -609,8 +643,10 @@ export default function Home() {
                         <NotesView
                           english={notes.english}
                           urdu={notes.urdu}
+                          hinglish={notes.hinglish}
                           infographicEn={infographicEn}
                           infographicUr={infographicUr}
+                          infographicHi={infographicHi}
                           videoName={videoName}
                           noteId={notes.noteId ?? loadedNoteId}
                           onEdit={() => setEditorOpen(true)}
@@ -638,6 +674,7 @@ export default function Home() {
                         <InfographicView
                           english={infographicEn}
                           urdu={infographicUr}
+                          hinglish={infographicHi}
                           loading={infographicLoading}
                           canGenerate={!!notes}
                           onGenerate={generateInfographic}
@@ -689,6 +726,7 @@ export default function Home() {
         onOpenChange={setEditorOpen}
         english={notes?.english}
         urdu={notes?.urdu}
+        hinglish={notes?.hinglish}
         noteId={notes?.noteId ?? loadedNoteId}
         videoName={videoName}
         onSaved={handleNotesSaved}

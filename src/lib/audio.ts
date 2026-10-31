@@ -153,14 +153,6 @@ export async function probeDuration(filePath: string): Promise<number | null> {
 }
 
 /**
- * Read a file as base64 (for sending to ASR).
- */
-export async function fileToBase64(filePath: string): Promise<string> {
-  const buf = await fs.readFile(filePath)
-  return buf.toString('base64')
-}
-
-/**
  * Recursively delete a directory and its contents (for temp cleanup).
  */
 export async function cleanupDir(dirPath: string): Promise<void> {

@@ -65,6 +65,7 @@ function timeAgo(iso: string): string {
 const LANG_LABEL: Record<Language, string> = {
   english: 'EN',
   urdu: 'UR',
+  hinglish: 'HI',
   both: 'EN+UR',
 }
 
@@ -100,11 +101,15 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
   }
 
   useEffect(() => {
+    // This effect intentionally starts the async history refresh on prop changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [refreshKey, trashMode])
 
   // Exit selection mode + clear selection whenever the list reloads.
   useEffect(() => {
+    // Selection belongs to the old list and must be cleared after a refresh.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(new Set())
     setSelectMode(false)
   }, [refreshKey])
@@ -500,6 +505,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
                   <span className="flex shrink-0 items-center gap-1">
                     {it.hasEnglishNotes && <span className="text-[10px] font-medium text-emerald-600" title="English notes">EN✓</span>}
                     {it.hasUrduNotes && <span className="text-[10px] font-medium text-emerald-600" title="Urdu notes">UR✓</span>}
+                    {it.hasHinglishNotes && <span className="text-[10px] font-medium text-emerald-600" title="Hinglish notes">HI✓</span>}
                     {it.hasEnglishInfographic && (
                       <span className="inline-flex items-center text-[10px] text-amber-600" title="English infographic">
                         <ImageIcon className="h-3 w-3" />
@@ -507,6 +513,11 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
                     )}
                     {it.hasUrduInfographic && (
                       <span className="inline-flex items-center text-[10px] text-amber-600" title="Urdu infographic">
+                        <ImageIcon className="h-3 w-3" />
+                      </span>
+                    )}
+                    {it.hasHinglishInfographic && (
+                      <span className="inline-flex items-center text-[10px] text-amber-600" title="Hinglish infographic">
                         <ImageIcon className="h-3 w-3" />
                       </span>
                     )}

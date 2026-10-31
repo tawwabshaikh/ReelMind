@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
 import os from 'os'
-import ZAI from 'z-ai-web-dev-sdk'
-import { extractAudio, fileToBase64, cleanupDir, probeDuration, chunkAudio } from '@/lib/audio'
+import { extractAudio, cleanupDir, probeDuration, chunkAudio } from '@/lib/audio'
+import { AIProviderError, transcribeAudioFile } from '@/lib/ai-provider'
+import { downloadVideoUrl, VideoUrlError } from '@/lib/video-url'
 
 export const runtime = 'nodejs'
 // Video upload + ffmpeg + ASR can take a while (especially multi-chunk).
@@ -16,23 +17,36 @@ export async function POST(req: NextRequest) {
   let chunkDir: string | null = null
   try {
     const form = await req.formData()
-    const file = form.get('video')
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: 'No video file provided. Upload a file under the "video" field.' }, { status: 400 })
+    const uploadedFile = form.get('video')
+    const videoUrl = form.get('url')
+    const file = uploadedFile instanceof File ? uploadedFile : null
+    if (!file && (typeof videoUrl !== 'string' || !videoUrl.trim())) {
+      return NextResponse.json({ error: 'Upload a video or provide a direct video URL.' }, { status: 400 })
     }
 
-    if (file.size === 0) {
+    if (file && file.size === 0) {
       return NextResponse.json({ error: 'The uploaded video is empty.' }, { status: 400 })
     }
-    if (file.size > MAX_BYTES) {
+    if (file && file.size > MAX_BYTES) {
       return NextResponse.json({ error: `Video too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max ${MAX_BYTES / 1024 / 1024} MB.` }, { status: 413 })
     }
 
-    const ext = (file.name.split('.').pop() || 'mp4').toLowerCase()
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'reel-upload-'))
-    const videoPath = path.join(tmpDir, `input.${ext}`)
-    const buf = Buffer.from(await file.arrayBuffer())
-    await fs.writeFile(videoPath, buf)
+    let videoPath: string
+    let videoName: string
+    let sizeBytes: number
+    if (file) {
+      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+      videoPath = path.join(tmpDir, `input.${ext}`)
+      await fs.writeFile(videoPath, Buffer.from(await file.arrayBuffer()))
+      videoName = file.name
+      sizeBytes = file.size
+    } else {
+      const downloaded = await downloadVideoUrl(videoUrl as string, path.join(tmpDir, 'linked-video.mp4'), MAX_BYTES)
+      videoPath = downloaded.path
+      videoName = downloaded.filename
+      sizeBytes = downloaded.sizeBytes
+    }
 
     const duration = await probeDuration(videoPath)
 
@@ -45,7 +59,6 @@ export async function POST(req: NextRequest) {
       const { dir: cDir, segments } = await chunkAudio(audioPath, duration)
       chunkDir = cDir
 
-      const zai = await ZAI.create()
       const parts: string[] = []
       let chunkErrors = 0
 
@@ -55,13 +68,12 @@ export async function POST(req: NextRequest) {
       for (let i = 0; i < segments.length; i++) {
         const segPath = segments[i]
         try {
-          const base64 = await fileToBase64(segPath)
-          const resp = await zai.audio.asr.create({ file_base64: base64 })
-          const text = (resp.text || '').trim()
+          const text = await transcribeAudioFile(segPath)
           if (text) {
             parts.push(text)
           }
         } catch (chunkErr) {
+          if (chunkErr instanceof AIProviderError) throw chunkErr
           chunkErrors++
           console.error(`[/api/transcribe] chunk ${i + 1}/${segments.length} failed:`, chunkErr instanceof Error ? chunkErr.message : chunkErr)
         }
@@ -79,8 +91,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         transcript,
         meta: {
-          filename: file.name,
-          sizeBytes: file.size,
+          filename: videoName,
+          sizeBytes,
           durationSec: duration,
           wordCount: transcript.split(/\s+/).filter(Boolean).length,
           segments: segments.length,
@@ -93,6 +105,12 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error('[/api/transcribe] error', err)
+    if (err instanceof VideoUrlError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    if (err instanceof AIProviderError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
     const message = err instanceof Error ? err.message : 'Unknown transcription error'
     return NextResponse.json({ error: message }, { status: 500 })
   } finally {

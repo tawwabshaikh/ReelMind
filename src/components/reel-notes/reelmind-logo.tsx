@@ -1,25 +1,21 @@
-/**
- * ReelMind logo — an abstract mark suggesting layered knowledge.
- * A rounded square (primary green) with three horizontal lines of decreasing
- * width (emerald → white fading), evoking text/knowledge layers without
- * using any literal play-button, robot, or brain imagery.
- * Recognisable at 16px.
- */
+import Image from 'next/image'
+
+/** ReelMind's original brand mark, displayed from the public icon asset. */
 export function ReelMindLogo({ size = 28, className = '' }: { size?: number; className?: string }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 28 28"
-      fill="none"
-      className={className}
-      aria-hidden="true"
+    <span
+      className={`relative inline-block shrink-0 overflow-hidden rounded-[28%] bg-white ${className}`}
+      style={{ width: size, height: size }}
     >
-      <rect width="28" height="28" rx="7" fill="var(--rm-primary, #0B3D2E)" />
-      <rect x="7" y="9" width="14" height="2.5" rx="1.25" fill="var(--rm-accent, #10B981)" />
-      <rect x="7" y="14" width="14" height="2.5" rx="1.25" fill="#FFFFFF" opacity="0.7" />
-      <rect x="7" y="19" width="9" height="2.5" rx="1.25" fill="#FFFFFF" opacity="0.4" />
-    </svg>
+      <Image
+        src="/icon.png"
+        alt="ReelMind logo"
+        fill
+        sizes={`${size}px`}
+        priority={size >= 32}
+        className="scale-[1.9] object-contain"
+      />
+    </span>
   )
 }
 

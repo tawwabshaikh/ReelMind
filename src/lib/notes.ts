@@ -1,6 +1,6 @@
-import ZAI from 'z-ai-web-dev-sdk'
 import { jsonrepair } from 'jsonrepair'
-import type { Language, KeyPoint, StructuredNote, GeneratedNotes } from './types'
+import { createChatCompletion } from './ai-provider'
+import type { Language, NoteLanguage, KeyPoint, StructuredNote, GeneratedNotes } from './types'
 
 export type { Language, KeyPoint, StructuredNote, GeneratedNotes }
 
@@ -26,7 +26,7 @@ Rules:
 - Tags should be single words or short phrases, lowercase.
 - Output ONLY the JSON object, nothing else.`
 
-function buildUserPrompt(transcript: string, language: 'english' | 'urdu'): string {
+function buildUserPrompt(transcript: string, language: NoteLanguage): string {
   if (language === 'urdu') {
     // CRITICAL: explicitly require Urdu script (Nastaliq), forbid Roman Urdu.
     return `Below is a transcript. Turn it into structured notes.
@@ -37,6 +37,20 @@ IMPORTANT LANGUAGE REQUIREMENT:
 - DO NOT write in English.
 - Use correct Urdu grammar, vocabulary and spelling.
 - The tags MUST also be in Urdu script.
+
+Transcript:
+"""
+${transcript}
+"""`
+  }
+  if (language === 'hinglish') {
+    return `Neeche video ka transcript hai. Isko structured Hinglish notes mein badlo.
+
+IMPORTANT LANGUAGE REQUIREMENT:
+- Saare values natural Hinglish / Roman Urdu mein likho, sirf Latin (English) letters use karo.
+- Urdu/Arabic script aur Devanagari script bilkul use mat karo.
+- Common English technical terms ko naturally English mein hi rakho; baaki explanation simple conversational Roman Urdu/Hinglish mein likho.
+- Headings, summary, details aur tags sab isi Hinglish style mein hon.
 
 Transcript:
 """
@@ -54,10 +68,13 @@ ${transcript}
 """`
 }
 
-function buildSystemPrompt(language: 'english' | 'urdu'): string {
+function buildSystemPrompt(language: NoteLanguage): string {
   const base = COMMON_FORMAT_INSTRUCTIONS
   if (language === 'urdu') {
     return base + `\n\nLANGUAGE: You MUST respond in Urdu using the Urdu (Nastaliq) script — the same script used for writing Urdu in Pakistan. Roman Urdu (Latin letters) is strictly forbidden. Your JSON string values must contain real Urdu script characters such as اردو, خوش آمدید, علم.`
+  }
+  if (language === 'hinglish') {
+    return base + `\n\nLANGUAGE: Respond in natural Hinglish / Roman Urdu using Latin letters only. Never use Urdu/Arabic or Devanagari script. Mix common English technical words naturally with conversational Roman Urdu.`
   }
   return base + `\n\nLANGUAGE: Respond in English only.`
 }
@@ -104,7 +121,7 @@ function extractJsonObject(raw: string): string {
   return cleaned
 }
 
-function parseStructuredNote(raw: string, language: 'english' | 'urdu'): StructuredNote {
+function parseStructuredNote(raw: string, language: NoteLanguage): StructuredNote {
   const jsonStr = repairJson(extractJsonObject(raw))
   let parsed: any
   try {
@@ -149,35 +166,24 @@ function parseStructuredNote(raw: string, language: 'english' | 'urdu'): Structu
 }
 
 async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
-  const zai = await ZAI.create()
-  const completion = await zai.chat.completions.create({
-    messages: [
-      { role: 'assistant', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    thinking: { type: 'disabled' },
-  })
-  const content = completion.choices[0]?.message?.content
-  if (!content || !content.trim()) {
-    throw new Error('LLM returned an empty response.')
-  }
-  return content
+  return createChatCompletion([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ])
 }
 
 /**
- * Generate structured notes from a transcript in the requested language(s).
- * For "both", two independent LLM calls are made (one EN, one UR) so each
- * version is fully idiomatic in its own language.
+ * Generate structured notes in the requested output language.
  */
 export async function generateNotes(
   transcript: string,
-  language: Language,
+  language: NoteLanguage,
 ): Promise<GeneratedNotes> {
   if (transcript.trim().length === 0) {
     throw new Error('Cannot generate notes from an empty transcript.')
   }
 
-  const make = async (lang: 'english' | 'urdu'): Promise<StructuredNote> => {
+  const make = async (lang: NoteLanguage): Promise<StructuredNote> => {
     const systemPrompt = buildSystemPrompt(lang)
     const userPrompt = buildUserPrompt(transcript, lang)
 
@@ -209,9 +215,10 @@ export async function generateNotes(
   if (language === 'urdu') {
     return { urdu: await make('urdu') }
   }
-  // both — run in parallel for speed
-  const [english, urdu] = await Promise.all([make('english'), make('urdu')])
-  return { english, urdu }
+  if (language === 'hinglish') {
+    return { hinglish: await make('hinglish') }
+  }
+  return { hinglish: await make('hinglish') }
 }
 
 // ---------------------------------------------------------------------------

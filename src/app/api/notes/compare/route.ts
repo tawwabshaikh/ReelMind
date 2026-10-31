@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { structuredNoteToMarkdown } from '@/lib/notes'
-import type { StructuredNote, NoteVersion } from '@/lib/types'
+import type { StructuredNote, NoteVersion, NoteLanguage } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     if (!rowA) return NextResponse.json({ error: `Note ${aId} not found.` }, { status: 404 })
     if (!rowB) return NextResponse.json({ error: `Note ${bId} not found.` }, { status: 404 })
 
-    const toVersion = (s: string | null, lang: 'english' | 'urdu'): NoteVersion | undefined => {
+    const toVersion = (s: string | null, lang: NoteLanguage): NoteVersion | undefined => {
       if (!s) return undefined
       try {
         const structured = JSON.parse(s) as StructuredNote
@@ -50,8 +50,10 @@ export async function GET(req: NextRequest) {
         wordCount: rowA.wordCount,
         english: toVersion(rowA.notesEn, 'english'),
         urdu: toVersion(rowA.notesUr, 'urdu'),
+        hinglish: toVersion(rowA.notesHi, 'hinglish'),
         infographicEn: rowA.infographicEn ? { filename: rowA.infographicEn, url: `/generated/${rowA.infographicEn}` } : null,
         infographicUr: rowA.infographicUr ? { filename: rowA.infographicUr, url: `/generated/${rowA.infographicUr}` } : null,
+        infographicHi: rowA.infographicHi ? { filename: rowA.infographicHi, url: `/generated/${rowA.infographicHi}` } : null,
       },
       b: {
         id: rowB.id,
@@ -62,8 +64,10 @@ export async function GET(req: NextRequest) {
         wordCount: rowB.wordCount,
         english: toVersion(rowB.notesEn, 'english'),
         urdu: toVersion(rowB.notesUr, 'urdu'),
+        hinglish: toVersion(rowB.notesHi, 'hinglish'),
         infographicEn: rowB.infographicEn ? { filename: rowB.infographicEn, url: `/generated/${rowB.infographicEn}` } : null,
         infographicUr: rowB.infographicUr ? { filename: rowB.infographicUr, url: `/generated/${rowB.infographicUr}` } : null,
+        infographicHi: rowB.infographicHi ? { filename: rowB.infographicHi, url: `/generated/${rowB.infographicHi}` } : null,
       },
     })
   } catch (err) {

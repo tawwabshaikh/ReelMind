@@ -17,8 +17,8 @@ export const metadata: Metadata = {
   keywords: ["video to notes", "AI learning", "transcription", "Urdu notes", "bilingual notes", "infographic", "knowledge"],
   authors: [{ name: "ReelMind" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
+  icon: "/icon.png",
+},
   openGraph: {
     title: "ReelMind — Turn videos into knowledge",
     description: "Transcribe videos, generate structured notes, and create shareable visual summaries — in English or Urdu.",

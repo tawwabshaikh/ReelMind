@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, type RGB } from 'pdf-lib'
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { StructuredNote } from './types'
@@ -11,7 +11,7 @@ const PAGE_W = 595.28
 const PAGE_H = 841.89
 const MARGIN = 48
 
-function hexToRgb(hex: string): rgb {
+function hexToRgb(hex: string): RGB {
   const m = hex.replace('#', '')
   return rgb(
     parseInt(m.slice(0, 2), 16) / 255,
@@ -80,7 +80,7 @@ function drawParagraph(
   page: PDFPage,
   font: PDFFont,
   text: string,
-  opts: { x: number; y: number; size: number; maxWidth: number; color?: rgb; lineHeight?: number; align?: 'left' | 'right' },
+  opts: { x: number; y: number; size: number; maxWidth: number; color?: RGB; lineHeight?: number; align?: 'left' | 'right' },
 ): number {
   const { x, y, size, maxWidth } = opts
   const color = opts.color ?? COLORS.text

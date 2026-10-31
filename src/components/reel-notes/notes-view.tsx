@@ -7,15 +7,17 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { ShareButton } from '@/components/reel-notes/share-button'
-import type { NoteVersion, InfographicFile } from '@/lib/types'
+import type { NoteVersion, InfographicFile, NoteLanguage } from '@/lib/types'
 import { slugify } from '@/lib/slugify-client'
 import { colorForTag, shade } from '@/lib/tag-colors'
 
 interface Props {
   english?: NoteVersion
   urdu?: NoteVersion
+  hinglish?: NoteVersion
   infographicEn?: InfographicFile | null
   infographicUr?: InfographicFile | null
+  infographicHi?: InfographicFile | null
   videoName?: string
   noteId?: string | null
   onEdit?: () => void
@@ -79,7 +81,7 @@ function NoteCard({
   readOnly,
 }: {
   version: NoteVersion
-  lang: 'english' | 'urdu'
+  lang: NoteLanguage
   infographic?: InfographicFile | null
   videoName?: string
   noteId?: string | null
@@ -87,6 +89,7 @@ function NoteCard({
   readOnly?: boolean
 }) {
   const isUrdu = lang === 'urdu'
+  const isHinglish = lang === 'hinglish'
   const { structured, markdown } = version
   const filename = `${slugify(structured.title)}-notes-${lang}.md`
   const [copied, setCopied] = useState(false)
@@ -125,7 +128,7 @@ function NoteCard({
         <div className="min-w-0">
           <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             <FileText className="h-3 w-3" />
-            {isUrdu ? 'اردو نوٹس' : 'English Notes'}
+            {isUrdu ? 'اردو نوٹس' : isHinglish ? 'Hinglish Notes' : 'English Notes'}
           </div>
           <h3 className={`truncate text-sm font-semibold ${isUrdu ? 'leading-loose' : ''}`}>
             {structured.title}
@@ -206,8 +209,8 @@ function NoteCard({
   )
 }
 
-export function NotesView({ english, urdu, infographicEn, infographicUr, videoName, noteId, onEdit, readOnly }: Props) {
-  if (!english && !urdu) {
+export function NotesView({ english, urdu, hinglish, infographicEn, infographicUr, infographicHi, videoName, noteId, onEdit, readOnly }: Props) {
+  if (!english && !urdu && !hinglish) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-16 text-center">
         <CheckCircle2 className="h-8 w-8 text-muted-foreground/50" />
@@ -233,6 +236,17 @@ export function NotesView({ english, urdu, infographicEn, infographicUr, videoNa
           version={urdu}
           lang="urdu"
           infographic={infographicUr}
+          videoName={videoName}
+          noteId={noteId}
+          onEdit={onEdit}
+          readOnly={readOnly}
+        />
+      )}
+      {hinglish && (
+        <NoteCard
+          version={hinglish}
+          lang="hinglish"
+          infographic={infographicHi}
           videoName={videoName}
           noteId={noteId}
           onEdit={onEdit}

@@ -1,5 +1,7 @@
 // Shared types — no runtime imports, safe for client + server.
-export type Language = 'english' | 'urdu' | 'both'
+/** `both` stays readable for records created by older versions. */
+export type Language = 'english' | 'urdu' | 'hinglish' | 'both'
+export type NoteLanguage = 'english' | 'urdu' | 'hinglish'
 
 export type Theme = 'emerald' | 'midnight' | 'sunrise'
 
@@ -13,9 +15,16 @@ export interface StructuredNote {
   summary: string
   keyPoints: KeyPoint[]
   tags: string[]
-  language: 'english' | 'urdu'
+  language: NoteLanguage
   /** Optional map of tag → hex color (e.g. { "deep work": "#10b981" }). */
   tagColors?: Record<string, string>
+}
+
+/** Notes returned by the generator, with only requested language versions set. */
+export interface GeneratedNotes {
+  english?: StructuredNote
+  urdu?: StructuredNote
+  hinglish?: StructuredNote
 }
 
 export interface NoteVersion {
@@ -35,9 +44,10 @@ export interface TranscribeResponse {
 
 export interface GenerateNotesResponse {
   noteId: string | null
-  language: Language
+  language: NoteLanguage
   english?: NoteVersion
   urdu?: NoteVersion
+  hinglish?: NoteVersion
 }
 
 export interface InfographicFile {
@@ -48,6 +58,7 @@ export interface InfographicFile {
 export interface GenerateInfographicResponse {
   english: InfographicFile | null
   urdu: InfographicFile | null
+  hinglish: InfographicFile | null
   dimensions: { width: number; height: number }
   theme: Theme
 }
@@ -63,8 +74,10 @@ export interface NoteDetail {
   wordCount: number | null
   english?: NoteVersion
   urdu?: NoteVersion
+  hinglish?: NoteVersion
   infographicEn: InfographicFile | null
   infographicUr: InfographicFile | null
+  infographicHi: InfographicFile | null
 }
 
 export interface NoteDetailResponse {
@@ -80,8 +93,10 @@ export interface CompareNote {
   wordCount: number | null
   english?: NoteVersion
   urdu?: NoteVersion
+  hinglish?: NoteVersion
   infographicEn: InfographicFile | null
   infographicUr: InfographicFile | null
+  infographicHi: InfographicFile | null
 }
 
 export interface CompareResponse {
@@ -97,10 +112,13 @@ export interface HistoryItem {
   deletedAt: string | null
   hasEnglishNotes: boolean
   hasUrduNotes: boolean
+  hasHinglishNotes: boolean
   hasEnglishInfographic: boolean
   hasUrduInfographic: boolean
+  hasHinglishInfographic: boolean
   infographicEnUrl: string | null
   infographicUrUrl: string | null
+  infographicHiUrl: string | null
   // Aggregated tags across EN+UR (deduped, lowercased) for filtering
   tags: string[]
   durationSec: number | null

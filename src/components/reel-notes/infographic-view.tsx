@@ -4,11 +4,12 @@ import { Download, ImageIcon, Sparkles, Loader2, Languages } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ThemeSelector } from '@/components/reel-notes/theme-selector'
-import type { InfographicFile, Theme } from '@/lib/types'
+import type { InfographicFile, NoteLanguage, Theme } from '@/lib/types'
 
 interface Props {
   english: InfographicFile | null
   urdu: InfographicFile | null
+  hinglish: InfographicFile | null
   loading: boolean
   canGenerate: boolean
   onGenerate: () => void
@@ -16,15 +17,16 @@ interface Props {
   onThemeChange: (t: Theme) => void
 }
 
-function InfographicCard({ file, lang }: { file: InfographicFile; lang: 'english' | 'urdu' }) {
+function InfographicCard({ file, lang }: { file: InfographicFile; lang: NoteLanguage }) {
   const isUrdu = lang === 'urdu'
+  const label = lang === 'urdu' ? 'اردو' : lang === 'hinglish' ? 'Hinglish' : 'EN'
   return (
     <div className="group overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:shadow-md">
       <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="border-emerald-500/30 bg-emerald-50 text-emerald-700">
             <Languages className="mr-1 h-3 w-3" />
-            {isUrdu ? 'اردو' : 'EN'}
+            {label}
           </Badge>
           <span className="text-xs text-muted-foreground">1080 × 1350 · PNG</span>
         </div>
@@ -48,8 +50,8 @@ function InfographicCard({ file, lang }: { file: InfographicFile; lang: 'english
   )
 }
 
-export function InfographicView({ english, urdu, loading, canGenerate, onGenerate, theme, onThemeChange }: Props) {
-  const hasAny = english || urdu
+export function InfographicView({ english, urdu, hinglish, loading, canGenerate, onGenerate, theme, onThemeChange }: Props) {
+  const hasAny = english || urdu || hinglish
 
   return (
     <div className="space-y-4">
@@ -112,6 +114,7 @@ export function InfographicView({ english, urdu, loading, canGenerate, onGenerat
         <div className="grid gap-5 md:grid-cols-2">
           {english && <InfographicCard file={english} lang="english" />}
           {urdu && <InfographicCard file={urdu} lang="urdu" />}
+          {hinglish && <InfographicCard file={hinglish} lang="hinglish" />}
         </div>
       )}
     </div>

@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     // Normalise language field
     const note: StructuredNote = {
       ...body.note,
-      language: body.note.language === 'urdu' ? 'urdu' : 'english',
+      language: body.note.language === 'urdu' ? 'urdu' : body.note.language === 'hinglish' ? 'hinglish' : 'english',
     }
     const filename = await exportNotePdf({
       note,

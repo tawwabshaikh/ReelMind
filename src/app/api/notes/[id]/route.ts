@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { db } from '@/lib/db'
 import { structuredNoteToMarkdown } from '@/lib/notes'
-import type { StructuredNote, NoteVersion, KeyPoint } from '@/lib/types'
+import type { StructuredNote, NoteVersion, KeyPoint, NoteLanguage } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }
 
-    const parse = (s: string | null, lang: 'english' | 'urdu'): NoteVersion | undefined => {
+    const parse = (s: string | null, lang: NoteLanguage): NoteVersion | undefined => {
       if (!s) return undefined
       try {
         const structured = JSON.parse(s) as StructuredNote
@@ -37,6 +37,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const english = parse(row.notesEn, 'english')
     const urdu = parse(row.notesUr, 'urdu')
+    const hinglish = parse(row.notesHi, 'hinglish')
 
     return NextResponse.json({
       note: {
@@ -50,8 +51,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         wordCount: row.wordCount,
         english,
         urdu,
+        hinglish,
         infographicEn: row.infographicEn ? { filename: row.infographicEn, url: `/generated/${row.infographicEn}` } : null,
         infographicUr: row.infographicUr ? { filename: row.infographicUr, url: `/generated/${row.infographicUr}` } : null,
+        infographicHi: row.infographicHi ? { filename: row.infographicHi, url: `/generated/${row.infographicHi}` } : null,
       },
     })
   } catch (err) {
@@ -69,6 +72,13 @@ interface PatchBody {
     tagColors?: Record<string, string>
   }
   urdu?: {
+    title?: string
+    summary?: string
+    keyPoints?: KeyPoint[]
+    tags?: string[]
+    tagColors?: Record<string, string>
+  }
+  hinglish?: {
     title?: string
     summary?: string
     keyPoints?: KeyPoint[]
@@ -96,7 +106,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const merge = (
       existingJson: string | null,
-      lang: 'english' | 'urdu',
+      lang: NoteLanguage,
       patch: PatchBody['english'],
     ): string | null => {
       let existing: StructuredNote | null = null
@@ -143,9 +153,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return JSON.stringify(existing)
     }
 
-    const data: { notesEn?: string | null; notesUr?: string | null } = {}
+    const data: { notesEn?: string | null; notesUr?: string | null; notesHi?: string | null } = {}
     if (body.english) data.notesEn = merge(row.notesEn, 'english', body.english)
     if (body.urdu) data.notesUr = merge(row.notesUr, 'urdu', body.urdu)
+    if (body.hinglish) data.notesHi = merge(row.notesHi, 'hinglish', body.hinglish)
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: 'No editable fields provided.' }, { status: 400 })
@@ -153,7 +164,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const updated = await db.note.update({ where: { id }, data })
 
-    const parse = (s: string | null, lang: 'english' | 'urdu'): NoteVersion | undefined => {
+    const parse = (s: string | null, lang: NoteLanguage): NoteVersion | undefined => {
       if (!s) return undefined
       try {
         const structured = JSON.parse(s) as StructuredNote
@@ -176,8 +187,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         wordCount: updated.wordCount,
         english: parse(updated.notesEn, 'english'),
         urdu: parse(updated.notesUr, 'urdu'),
+        hinglish: parse(updated.notesHi, 'hinglish'),
         infographicEn: updated.infographicEn ? { filename: updated.infographicEn, url: `/generated/${updated.infographicEn}` } : null,
         infographicUr: updated.infographicUr ? { filename: updated.infographicUr, url: `/generated/${updated.infographicUr}` } : null,
+        infographicHi: updated.infographicHi ? { filename: updated.infographicHi, url: `/generated/${updated.infographicHi}` } : null,
       },
     })
   } catch (err) {
@@ -210,7 +223,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Permanent delete: clean up PNGs, then remove the row.
-    const filesToDelete = [row.infographicEn, row.infographicUr].filter(Boolean) as string[]
+    const filesToDelete = [row.infographicEn, row.infographicUr, row.infographicHi].filter(Boolean) as string[]
     await Promise.all(
       filesToDelete.map(async (fn) => {
         try {

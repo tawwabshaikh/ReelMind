@@ -12,7 +12,7 @@ model Note {
   id        String   @id @default(cuid())
   // Source video metadata
   videoName String
-  // Selected language mode: "english" | "urdu" | "both"
+  // Selected language mode: "english" | "urdu" | "hinglish" ("both" is legacy)
   language  String
   // Raw transcript from ASR
   transcript String
@@ -23,9 +23,11 @@ model Note {
   // Structured notes (JSON string of {title, summary, keyPoints[], tags[], markdown})
   notesEn   String?
   notesUr   String?
+  notesHi   String?
   // Generated infographic PNG filenames (served from /generated/)
   infographicEn String?
   infographicUr String?
+  infographicHi String?
   createdAt DateTime @default(now())
   // Soft-delete: when set, the note is in the trash (excluded from the default
   // history list) but can be restored or permanently deleted.

@@ -34,7 +34,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import type { NoteVersion, StructuredNote, KeyPoint, NoteDetail } from '@/lib/types'
+import type { NoteVersion, StructuredNote, KeyPoint, NoteDetail, NoteLanguage } from '@/lib/types'
 import { colorForTag, shade } from '@/lib/tag-colors'
 
 const TAG_COLOR_PRESETS = [
@@ -48,6 +48,7 @@ interface Props {
   /** Current note detail (english + urdu versions). */
   english?: NoteVersion
   urdu?: NoteVersion
+  hinglish?: NoteVersion
   noteId: string | null
   videoName: string
   /** Called after a successful save with the updated note detail. */
@@ -137,15 +138,18 @@ function SortableKeyPoint({
   )
 }
 
-export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoName, onSaved }: Props) {
+export function NoteEditor({ open, onOpenChange, english, urdu, hinglish, noteId, videoName, onSaved }: Props) {
   const hasEn = !!english
   const hasUr = !!urdu
-  const [activeLang, setActiveLang] = useState<'english' | 'urdu'>(hasEn ? 'english' : 'urdu')
+  const hasHi = !!hinglish
+  const [activeLang, setActiveLang] = useState<NoteLanguage>(hasEn ? 'english' : hasUr ? 'urdu' : 'hinglish')
   const [en, setEn] = useState<EditableNote>(toEditable(english))
   const [ur, setUr] = useState<EditableNote>(toEditable(urdu))
+  const [hi, setHi] = useState<EditableNote>(toEditable(hinglish))
   const [saving, setSaving] = useState(false)
   const [tagInputEn, setTagInputEn] = useState('')
   const [tagInputUr, setTagInputUr] = useState('')
+  const [tagInputHi, setTagInputHi] = useState('')
 
   // DnD sensors — pointer for mouse/touch, keyboard for accessibility
   const sensors = useSensors(
@@ -164,18 +168,22 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
   // Re-sync local state when the modal opens or the source notes change.
   useEffect(() => {
     if (open) {
+      // Reset the draft from the latest source notes each time editing opens.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEn(toEditable(english))
       setUr(toEditable(urdu))
-      setActiveLang(hasEn ? 'english' : 'urdu')
+      setHi(toEditable(hinglish))
+      setActiveLang(hasEn ? 'english' : hasUr ? 'urdu' : 'hinglish')
       setTagInputEn('')
       setTagInputUr('')
+      setTagInputHi('')
     }
-  }, [open, english, urdu, hasEn])
+  }, [open, english, urdu, hinglish, hasEn, hasUr])
 
-  const current = activeLang === 'english' ? en : ur
-  const setCurrent = activeLang === 'english' ? setEn : setUr
-  const tagInput = activeLang === 'english' ? tagInputEn : tagInputUr
-  const setTagInput = activeLang === 'english' ? setTagInputEn : setTagInputUr
+  const current = activeLang === 'english' ? en : activeLang === 'urdu' ? ur : hi
+  const setCurrent = activeLang === 'english' ? setEn : activeLang === 'urdu' ? setUr : setHi
+  const tagInput = activeLang === 'english' ? tagInputEn : activeLang === 'urdu' ? tagInputUr : tagInputHi
+  const setTagInput = activeLang === 'english' ? setTagInputEn : activeLang === 'urdu' ? setTagInputUr : setTagInputHi
   const isUrdu = activeLang === 'urdu'
 
   const addTag = () => {
@@ -242,6 +250,15 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
           tagColors: ur.tagColors,
         }
       }
+      if (hasHi) {
+        payload.hinglish = {
+          title: hi.title,
+          summary: hi.summary,
+          keyPoints: hi.keyPoints.filter((kp) => kp.detail.trim()),
+          tags: hi.tags,
+          tagColors: hi.tagColors,
+        }
+      }
       const res = await fetch(`/api/notes/${noteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -272,9 +289,9 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
           </DialogDescription>
         </DialogHeader>
 
-        {hasEn && hasUr && (
+        {[hasEn, hasUr, hasHi].filter(Boolean).length > 1 && (
           <div className="flex gap-2 rounded-lg bg-muted/50 p-1">
-            {(['english', 'urdu'] as const).map((lng) => (
+            {(['english', 'urdu', 'hinglish'] as const).filter((lng) => lng === 'english' ? hasEn : lng === 'urdu' ? hasUr : hasHi).map((lng) => (
               <button
                 key={lng}
                 type="button"
@@ -283,7 +300,7 @@ export function NoteEditor({ open, onOpenChange, english, urdu, noteId, videoNam
                   activeLang === lng ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {lng === 'english' ? 'English' : 'اردو'}
+                {lng === 'english' ? 'English' : lng === 'urdu' ? 'اردو' : 'Hinglish'}
               </button>
             ))}
           </div>

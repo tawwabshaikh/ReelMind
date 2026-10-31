@@ -1,18 +1,18 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import type { Language } from '@/lib/types'
+import type { NoteLanguage } from '@/lib/types'
 
 interface Props {
-  value: Language
-  onChange: (v: Language) => void
+  value: NoteLanguage
+  onChange: (v: NoteLanguage) => void
   disabled?: boolean
 }
 
-const OPTIONS: { value: Language; label: string }[] = [
+const OPTIONS: { value: NoteLanguage; label: string }[] = [
   { value: 'english', label: 'English' },
   { value: 'urdu', label: 'اردو' },
-  { value: 'both', label: 'Both' },
+  { value: 'hinglish', label: 'Hinglish' },
 ]
 
 export function LanguageSelector({ value, onChange, disabled }: Props) {

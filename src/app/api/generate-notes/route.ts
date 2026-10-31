@@ -2,17 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   generateNotes,
   structuredNoteToMarkdown,
-  Language,
   StructuredNote,
 } from '@/lib/notes'
 import { db } from '@/lib/db'
+import { AIProviderError } from '@/lib/ai-provider'
+import type { NoteLanguage } from '@/lib/types'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
 interface GenerateNotesBody {
   transcript: string
-  language: Language
+  language: NoteLanguage
   videoName?: string
   durationSec?: number | null
   sizeBytes?: number | null
@@ -31,8 +32,8 @@ export async function POST(req: NextRequest) {
     if (!body?.transcript || typeof body.transcript !== 'string' || !body.transcript.trim()) {
       return NextResponse.json({ error: 'Missing "transcript".' }, { status: 400 })
     }
-    const language: Language =
-      body.language === 'urdu' || body.language === 'both' || body.language === 'english'
+    const language: NoteLanguage =
+      body.language === 'urdu' || body.language === 'hinglish' || body.language === 'english'
         ? body.language
         : 'english'
 
@@ -44,6 +45,9 @@ export async function POST(req: NextRequest) {
       : undefined
     const urdu: NoteVersionOutput | undefined = generated.urdu
       ? { structured: generated.urdu, markdown: structuredNoteToMarkdown(generated.urdu) }
+      : undefined
+    const hinglish: NoteVersionOutput | undefined = generated.hinglish
+      ? { structured: generated.hinglish, markdown: structuredNoteToMarkdown(generated.hinglish) }
       : undefined
 
     // 2) Persist metadata to the database so each run is traceable.
@@ -61,6 +65,7 @@ export async function POST(req: NextRequest) {
           wordCount: typeof body.wordCount === 'number' && Number.isFinite(body.wordCount) ? Math.round(body.wordCount) : null,
           notesEn: english ? JSON.stringify(english.structured) : null,
           notesUr: urdu ? JSON.stringify(urdu.structured) : null,
+          notesHi: hinglish ? JSON.stringify(hinglish.structured) : null,
         },
       })
       noteId = created.id
@@ -74,10 +79,12 @@ export async function POST(req: NextRequest) {
       language,
       english,
       urdu,
+      hinglish,
     })
   } catch (err) {
     console.error('[/api/generate-notes] error', err)
     const message = err instanceof Error ? err.message : 'Unknown notes generation error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const status = err instanceof AIProviderError ? err.status : 500
+    return NextResponse.json({ error: message }, { status })
   }
 }

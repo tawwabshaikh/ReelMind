@@ -446,15 +446,16 @@ export async function renderInfographic(note: StructuredNote, theme: Theme = 'em
 }
 
 /**
- * Render two infographics (one per language) for "both" mode.
+ * Render an infographic for each requested notes language.
  */
 export async function renderInfographics(
-  notes: { english?: StructuredNote; urdu?: StructuredNote },
+  notes: { english?: StructuredNote; urdu?: StructuredNote; hinglish?: StructuredNote },
   theme: Theme = 'emerald',
-): Promise<{ english?: string; urdu?: string }> {
-  const out: { english?: string; urdu?: string } = {}
+): Promise<{ english?: string; urdu?: string; hinglish?: string }> {
+  const out: { english?: string; urdu?: string; hinglish?: string } = {}
   if (notes.english) out.english = await renderInfographic(notes.english, theme)
   if (notes.urdu) out.urdu = await renderInfographic(notes.urdu, theme)
+  if (notes.hinglish) out.hinglish = await renderInfographic(notes.hinglish, theme)
   return out
 }
 

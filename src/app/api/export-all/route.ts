@@ -31,7 +31,7 @@ const MUTED = hexToRgb('#64748b')
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as { language?: string }
-    const langFilter = body?.language // 'english' | 'urdu' | undefined (all)
+    const langFilter = body?.language // 'english' | 'urdu' | 'hinglish' | undefined (all)
 
     const rows = await db.note.findMany({
       orderBy: { createdAt: 'desc' },
@@ -41,8 +41,10 @@ export async function POST(req: NextRequest) {
         language: true,
         notesEn: true,
         notesUr: true,
+        notesHi: true,
         infographicEn: true,
         infographicUr: true,
+        infographicHi: true,
         createdAt: true,
       },
     })
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest) {
     const regular = await pdf.embedFont(StandardFonts.Helvetica)
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
 
-    const parseNote = (s: string | null, lang: 'english' | 'urdu'): StructuredNote | null => {
+    const parseNote = (s: string | null, lang: 'english' | 'urdu' | 'hinglish'): StructuredNote | null => {
       if (!s) return null
       try {
         const n = JSON.parse(s) as StructuredNote
@@ -69,12 +71,13 @@ export async function POST(req: NextRequest) {
     let noteIndex = 0
 
     for (const row of rows) {
-      const en = langFilter !== 'urdu' ? parseNote(row.notesEn, 'english') : null
-      const ur = langFilter !== 'english' ? parseNote(row.notesUr, 'urdu') : null
-      if (!en && !ur) continue
+      const en = !langFilter || langFilter === 'english' ? parseNote(row.notesEn, 'english') : null
+      const ur = !langFilter || langFilter === 'urdu' ? parseNote(row.notesUr, 'urdu') : null
+      const hi = !langFilter || langFilter === 'hinglish' ? parseNote(row.notesHi, 'hinglish') : null
+      if (!en && !ur && !hi) continue
 
       noteIndex++
-      const isMultiple = rows.length > 1 || (!!en && !!ur)
+      const isMultiple = rows.length > 1 || [en, ur, hi].filter(Boolean).length > 1
 
       // ---- Cover / divider page (only when there are multiple sections) ----
       if (isMultiple) {
@@ -168,6 +171,7 @@ export async function POST(req: NextRequest) {
 
       if (en) await addSheet(en, row.infographicEn)
       if (ur) await addSheet(ur, row.infographicUr)
+      if (hi) await addSheet(hi, row.infographicHi)
     }
 
     if (pdf.getPageCount() === 0) {
