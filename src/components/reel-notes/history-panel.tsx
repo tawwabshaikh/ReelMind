@@ -270,9 +270,9 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
   const visibleSelectedCount = filtered.filter((it) => selected.has(it.id)).length
 
   return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+    <div className="rounded-2xl border bg-card p-3 shadow-sm sm:p-5">
+      <div className="mb-3 flex flex-col items-stretch gap-3 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {trashMode ? (
             <Trash className="h-4 w-4 text-amber-600" />
           ) : (
@@ -293,7 +293,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-start gap-1 sm:justify-end sm:gap-1.5">
           {items && items.length > 0 && !selectMode && (
             <>
               <Button
@@ -468,7 +468,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
                   onClick={() => handleRow(it.id)}
                   disabled={busy}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all',
+                    'flex w-full flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all sm:flex-nowrap',
                     active && !selectMode
                       ? 'border-emerald-500/50 bg-emerald-50/70 dark:bg-emerald-950/20'
                       : isSelected
@@ -488,7 +488,7 @@ export function HistoryPanel({ onLoad, activeId, refreshKey = 0, onDeleted, onCo
                   ) : (
                     <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   )}
-                  <span className="max-w-[120px] truncate text-sm font-medium sm:max-w-[150px]">{it.videoName}</span>
+                  <span className="min-w-0 max-w-[120px] flex-1 truncate text-sm font-medium sm:max-w-[150px] sm:flex-none">{it.videoName}</span>
                   <Badge variant="outline" className="shrink-0 text-[10px] uppercase">
                     {LANG_LABEL[it.language]}
                   </Badge>
