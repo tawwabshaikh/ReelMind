@@ -468,12 +468,23 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
           <Image
-            src="/reelmind-wabsar-badge.png"
+            src="/reelmind-wabsar-badge-light.png"
             alt="ReelMind by Wabsar"
             width={1720}
             height={430}
             priority
-            className="h-auto w-[min(132px,36vw)] shrink-0 drop-shadow-[0_0_1px_rgba(51,65,85,0.8)] dark:drop-shadow-[0_0_1px_rgba(248,250,252,0.8)] sm:w-[190px]"
+            sizes="(max-width: 640px) 36vw, 190px"
+            className="block h-auto w-[min(132px,36vw)] shrink-0 sm:w-[190px] dark:hidden"
+          />
+          <Image
+            src="/reelmind-wabsar-badge-dark.png"
+            alt=""
+            aria-hidden="true"
+            width={1720}
+            height={430}
+            priority
+            sizes="(max-width: 640px) 36vw, 190px"
+            className="hidden h-auto w-[min(132px,36vw)] shrink-0 sm:w-[190px] dark:block"
           />
           <div className="flex items-baseline gap-2">
             <span className="hidden text-xs text-muted-foreground sm:inline">Video → Knowledge</span>
@@ -777,7 +788,9 @@ export default function Home() {
             className="mx-auto h-10 w-[min(360px,78vw)] object-cover"
             style={{ objectPosition: 'center 45%' }}
           />
-          <p className="justify-self-center sm:justify-self-end">Watch less. Learn more.</p>
+          <p className="justify-self-center text-black dark:text-muted-foreground sm:justify-self-end">
+            Watch less. Learn more.
+          </p>
         </div>
       </footer>
 
