@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import Image from 'next/image'
 import { toast } from 'sonner'
 import {
   Loader2,
@@ -757,12 +758,20 @@ export default function Home() {
 
       {/* ===================== Footer ===================== */}
       <footer className="mt-auto border-t border-border/60">
-        <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:px-6">
-          <p className="flex items-center gap-1.5">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-3 px-4 py-4 text-xs text-muted-foreground sm:grid-cols-[1fr_auto_1fr] sm:px-6">
+          <p className="flex items-center justify-self-center gap-1.5 sm:justify-self-start">
             <ReelMindLogo size={14} />
             ReelMind · AI Learning · Video → Knowledge
           </p>
-          <p>Watch less. Learn more.</p>
+          <Image
+            src="/built-by-wabsar.png"
+            alt="Built by Wabsar"
+            width={2172}
+            height={724}
+            className="mx-auto h-10 w-[min(360px,78vw)] object-cover"
+            style={{ objectPosition: 'center 45%' }}
+          />
+          <p className="justify-self-center sm:justify-self-end">Watch less. Learn more.</p>
         </div>
       </footer>
 
