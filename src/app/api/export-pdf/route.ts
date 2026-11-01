@@ -17,6 +17,13 @@ export async function POST(req: NextRequest) {
     if (!body?.note || !body.note.title) {
       return NextResponse.json({ error: 'Missing "note" structured data.' }, { status: 400 })
     }
+    if (
+      body.infographicUrl != null &&
+      (typeof body.infographicUrl !== 'string' ||
+        !/^\/?generated\/[A-Za-z0-9][A-Za-z0-9._-]*\.png$/.test(body.infographicUrl))
+    ) {
+      return NextResponse.json({ error: 'Infographic must be a generated PNG from this workspace.' }, { status: 400 })
+    }
     // Normalise language field
     const note: StructuredNote = {
       ...body.note,

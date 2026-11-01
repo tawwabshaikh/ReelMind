@@ -307,7 +307,11 @@ export async function exportNotePdf(input: ExportPdfInput): Promise<string> {
 
   // -------- Page 2: Infographic (if provided) --------
   if (input.infographicUrl) {
-    const localPath = path.join(process.cwd(), 'public', input.infographicUrl.replace(/^\//, ''))
+    const filename = input.infographicUrl.replace(/^\/?generated\//, '')
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/.test(filename)) {
+      throw new Error('Infographic must be a generated PNG from this workspace.')
+    }
+    const localPath = path.join(OUTPUT_DIR, filename)
     try {
       const pngBytes = await fs.readFile(localPath)
       const png = await pdf.embedPng(pngBytes)

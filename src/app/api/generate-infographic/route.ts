@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { StructuredNote } from '@/lib/notes'
 import type { NoteLanguage } from '@/lib/types'
-import { renderInfographic, renderInfographics, INFOGRAPHIC_DIMENSIONS, isTheme } from '@/lib/infographic'
+import { renderInfographics, INFOGRAPHIC_DIMENSIONS, isTheme } from '@/lib/infographic'
 import { db } from '@/lib/db'
 
 export const runtime = 'nodejs'
@@ -66,6 +66,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
-
-// Helper export for callers that want single-note rendering without the wrapper.
-export { renderInfographic }

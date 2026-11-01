@@ -135,7 +135,7 @@ function parseStructuredNote(raw: string, language: NoteLanguage): StructuredNot
     try {
       parsed = JSON.parse(jsonrepair(jsonStr))
     } catch (err) {
-      throw new Error(`LLM did not return valid JSON. ${err instanceof Error ? err.message : String(err)}. Raw (truncated): ${raw.slice(0, 300)}`)
+      throw new Error(`LLM did not return valid JSON. ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

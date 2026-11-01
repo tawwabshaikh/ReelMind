@@ -21,6 +21,12 @@ node_modules
 
 # production
 /build
+/db/*.db
+/db/*.db-journal
+/db/*.db-shm
+/db/*.db-wal
+/public/generated/*
+!/public/generated/.gitkeep
 
 # misc
 .DS_Store
@@ -47,6 +53,7 @@ local-*
 .claude
 .z-ai-config
 *.log
+*.pid
 dev.log
 dev.out.log
 test
