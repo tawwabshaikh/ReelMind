@@ -780,14 +780,22 @@ export default function Home() {
             <ReelMindLogo size={14} />
             ReelMind · AI Learning · Video → Knowledge
           </p>
-          <Image
-            src="/built-by-wabsar.png"
-            alt="Built by Wabsar"
-            width={2172}
-            height={724}
-            className="mx-auto h-10 w-[min(360px,78vw)] object-cover"
-            style={{ objectPosition: 'center 45%' }}
-          />
+          <a
+            href="https://www.wabsar.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Visit Wabsar website (opens in a new tab)"
+            className="mx-auto block rounded-sm transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <Image
+              src="/built-by-wabsar.png"
+              alt="Built by Wabsar"
+              width={2172}
+              height={724}
+              className="h-10 w-[min(360px,78vw)] object-cover"
+              style={{ objectPosition: 'center 45%' }}
+            />
+          </a>
           <p className="justify-self-center text-black dark:text-muted-foreground sm:justify-self-end">
             Watch less. Learn more.
           </p>
