@@ -32,7 +32,7 @@ import { NoteEditor } from '@/components/reel-notes/note-editor'
 import { CompareDialog } from '@/components/reel-notes/compare-dialog'
 import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
 import { ShareButton } from '@/components/reel-notes/share-button'
-import { ReelMindLogo, ReelMindWordmark } from '@/components/reel-notes/reelmind-logo'
+import { ReelMindLogo } from '@/components/reel-notes/reelmind-logo'
 import { safeJsonFetch } from '@/lib/safe-fetch'
 import { isLikelyHinglish, isLikelyUrdu } from '@/lib/hinglish'
 import type {
@@ -467,9 +467,15 @@ export default function Home() {
       {/* ===================== Header ===================== */}
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6">
-          <ReelMindLogo size={36} />
+          <Image
+            src="/reelmind-wabsar-badge.png"
+            alt="ReelMind by Wabsar"
+            width={1720}
+            height={430}
+            priority
+            className="h-auto w-[min(132px,36vw)] shrink-0 drop-shadow-[0_0_1px_rgba(51,65,85,0.8)] dark:drop-shadow-[0_0_1px_rgba(248,250,252,0.8)] sm:w-[190px]"
+          />
           <div className="flex items-baseline gap-2">
-            <ReelMindWordmark className="text-base font-semibold tracking-tight" />
             <span className="hidden text-xs text-muted-foreground sm:inline">Video → Knowledge</span>
           </div>
           <div className="ml-auto flex items-center gap-1">
