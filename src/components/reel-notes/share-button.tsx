@@ -48,12 +48,12 @@ export function ShareButton({ noteId, videoName, variant = 'icon', disabled }: P
     variant === 'icon' ? (
       <Button
         size="sm"
-        variant="secondary"
-        className="bg-white/15 text-white hover:bg-white/25"
+        variant="ghost"
+        className="h-7 w-7 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
         disabled={disabled || !canShare}
         onClick={() => setOpen(true)}
         aria-label="Share note"
-        title={canShare ? 'Share link' : 'Generate notes first to share'}
+        title={canShare ? 'Share link' : 'Save the note before sharing'}
       >
         <Share2 className="h-3.5 w-3.5" />
       </Button>
@@ -96,7 +96,7 @@ export function ShareButton({ noteId, videoName, variant = 'icon', disabled }: P
               <LinkIcon className="h-3 w-3" /> What viewers will see
             </p>
             <ul className="list-inside list-disc space-y-0.5">
-              <li>Read-only notes (English + Urdu)</li>
+              <li>Read-only notes in English, Urdu, or Hinglish</li>
               <li>Full transcript</li>
               <li>Generated infographic images</li>
               <li>Download buttons for .md, .txt, and PNG</li>

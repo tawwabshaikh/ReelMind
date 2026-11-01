@@ -477,7 +477,7 @@ export default function Home() {
                 <Eye className="h-3 w-3" /> Shared
               </Badge>
             )}
-            {notes && !sharedMode && (
+            {notes && (
               <ShareButton noteId={notes.noteId ?? loadedNoteId} videoName={videoName} variant="labeled" />
             )}
             <Button
