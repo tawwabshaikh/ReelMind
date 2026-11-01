@@ -52,7 +52,6 @@ export async function transcribeAudioFile(filePath: string): Promise<string> {
     const result = await runWhisper([
       '-m', modelPath,
       '-f', filePath,
-      '-ng',
       '-nt',
       '-np',
       '-otxt',
