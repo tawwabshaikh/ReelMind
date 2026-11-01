@@ -175,8 +175,8 @@ const HINGLISH_MARKERS = new Set([
 ])
 
 function isHinglish(note: StructuredNote): boolean {
-  const prose = [note.title, note.summary, ...note.keyPoints.flatMap((point) => [point.heading, point.detail])]
-  const text = [...prose, ...note.tags].join(' ')
+  const prose = [note.title, note.summary, ...note.keyPoints.map((point) => point.detail)]
+  const text = [...prose, ...note.keyPoints.map((point) => point.heading), ...note.tags].join(' ')
   // Hinglish output is expected in Roman script; reject Urdu and Devanagari.
   if (/[\u0600-\u06ff\u0750-\u077f\u0900-\u097f]/u.test(text)) return false
   const words = (value: string) => value.toLowerCase().match(/[a-z]+/g) ?? []
@@ -185,6 +185,36 @@ function isHinglish(note: StructuredNote): boolean {
   const allWords = words(prose.join(' '))
   const markers = allWords.filter((word) => HINGLISH_MARKERS.has(word))
   return markers.length >= 3 && new Set(markers).size >= 2
+}
+
+async function translateNoteToHinglish(note: StructuredNote): Promise<StructuredNote> {
+  const systemPrompt = `Translate the structured note into natural Pakistani Hinglish / Roman Urdu. Keep the JSON keys and key-point order unchanged. Translate the title, summary, and every heading/detail. Keep technical terms in English only when natural; all sentences must use Roman Urdu grammar. Use Latin letters only. Preserve meaning and do not add facts. Tags can stay as short topic labels.
+Return only the same JSON structure: {"title":"...","summary":"...","keyPoints":[{"heading":"...","detail":"..."}],"tags":["..."]}.
+Examples: "Water and Health" => "Pani aur Sehat"; "Water is essential for the human body." => "Pani insani jism ke liye zaroori hai."; "Body temperature" => "Body temperature ko control karna"; "It regulates body temperature." => "Yeh body temperature ko control karta hai."; "People should drink water regularly." => "Logon ko rozana pani peena chahiye."`
+  const source = JSON.stringify({
+    title: note.title,
+    summary: note.summary,
+    keyPoints: note.keyPoints,
+    tags: note.tags,
+  })
+
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const raw = await callLLM(
+        systemPrompt + (attempt > 1
+          ? '\nThe previous result still had English sentences. Rewrite every title, summary, and detail in Roman Urdu/Hinglish. Keep headings short but include Hinglish grammar words.'
+          : ''),
+        `Translate these note fields without summarizing:\n${source}`,
+      )
+      const translated = parseStructuredNote(raw, 'hinglish')
+      if (!isHinglish(translated)) throw new Error('The translator left English-only note content.')
+      return translated
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Could not translate note content to Hinglish.')
 }
 
 async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
@@ -220,16 +250,16 @@ export async function generateNotes(
             : '\n\nNOTE: Your previous response was not valid JSON. Output ONLY a single valid JSON object. Each keyPoints array element MUST be exactly { "heading": "...", "detail": "..." } — do NOT nest other keys. Ensure every { has a matching }. Do not wrap in markdown fences.'
           : ''
       const raw = await callLLM(systemPrompt + correction, userPrompt)
+      let note: StructuredNote
       try {
-        const note = parseStructuredNote(raw, lang)
-        if (lang === 'hinglish' && !isHinglish(note)) {
-          throw new Error('The local model returned English instead of Hinglish; retrying with a stronger language instruction.')
-        }
-        return note
+        note = parseStructuredNote(raw, lang)
       } catch (err) {
         lastErr = err
         console.warn(`[generateNotes] parse attempt ${attempt} failed for ${lang}:`, err instanceof Error ? err.message : err)
+        continue
       }
+      if (lang === 'hinglish' && !isHinglish(note)) return translateNoteToHinglish(note)
+      return note
     }
     throw lastErr instanceof Error
       ? lastErr
