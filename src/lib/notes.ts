@@ -47,10 +47,13 @@ ${transcript}
     return `Neeche video ka transcript hai. Isko structured Hinglish notes mein badlo.
 
 IMPORTANT LANGUAGE REQUIREMENT:
-- Saare values natural Hinglish / Roman Urdu mein likho, sirf Latin (English) letters use karo.
+- Har value ko natural Pakistani Hinglish / Roman Urdu mein likho. Sirf Latin letters use karo.
+- Har summary aur detail ki sentence structure Roman Urdu/Hinglish ho. English transcript ko English mein summarize mat karo.
+- English technical nouns jaise "body temperature" aur "digestion" reh sakte hain, lekin unke around Roman Urdu grammar zaroor likho (jaise "Pani body temperature ko control karta hai").
 - Urdu/Arabic script aur Devanagari script bilkul use mat karo.
-- Common English technical terms ko naturally English mein hi rakho; baaki explanation simple conversational Roman Urdu/Hinglish mein likho.
 - Headings, summary, details aur tags sab isi Hinglish style mein hon.
+- Style example: English "Water is important for health and helps digestion." ko "Pani sehat ke liye zaroori hai aur digestion mein help karta hai." likho.
+- JSON keys English mein rakho; JSON ke andar content Hinglish mein ho.
 
 Transcript:
 """
@@ -74,7 +77,7 @@ function buildSystemPrompt(language: NoteLanguage): string {
     return base + `\n\nLANGUAGE: You MUST respond in Urdu using the Urdu (Nastaliq) script — the same script used for writing Urdu in Pakistan. Roman Urdu (Latin letters) is strictly forbidden. Your JSON string values must contain real Urdu script characters such as اردو, خوش آمدید, علم.`
   }
   if (language === 'hinglish') {
-    return base + `\n\nLANGUAGE: Respond in natural Hinglish / Roman Urdu using Latin letters only. Never use Urdu/Arabic or Devanagari script. Mix common English technical words naturally with conversational Roman Urdu.`
+    return base + `\n\nLANGUAGE: The transcript may be English, but all JSON string values MUST be rewritten in natural Pakistani Hinglish / Roman Urdu using Latin letters only. English-only sentences are incorrect. Keep technical nouns in English when natural, but use Roman Urdu grammar around them. Example: "The process improves health" => "Yeh process sehat ko behtar banata hai." Never use Urdu/Arabic or Devanagari script.`
   }
   return base + `\n\nLANGUAGE: Respond in English only.`
 }
@@ -165,6 +168,25 @@ function parseStructuredNote(raw: string, language: NoteLanguage): StructuredNot
   return { title, summary, keyPoints, tags, language }
 }
 
+const HINGLISH_MARKERS = new Set([
+  'hai', 'hain', 'ka', 'ki', 'ko', 'se', 'aur', 'mein', 'liye', 'kar', 'karta', 'karti',
+  'karte', 'karein', 'hota', 'hoti', 'hote', 'zaroori', 'chahiye', 'sakta', 'sakti',
+  'yeh', 'ye', 'woh', 'isliye', 'matlab', 'apne', 'bhi', 'lekin', 'jab', 'tab', 'tak',
+])
+
+function isHinglish(note: StructuredNote): boolean {
+  const prose = [note.title, note.summary, ...note.keyPoints.flatMap((point) => [point.heading, point.detail])]
+  const text = [...prose, ...note.tags].join(' ')
+  // Hinglish output is expected in Roman script; reject Urdu and Devanagari.
+  if (/[\u0600-\u06ff\u0750-\u077f\u0900-\u097f]/u.test(text)) return false
+  const words = (value: string) => value.toLowerCase().match(/[a-z]+/g) ?? []
+  // A single Hinglish paragraph must not hide English-only bullet points.
+  if (prose.some((value) => !words(value).some((word) => HINGLISH_MARKERS.has(word)))) return false
+  const allWords = words(prose.join(' '))
+  const markers = allWords.filter((word) => HINGLISH_MARKERS.has(word))
+  return markers.length >= 3 && new Set(markers).size >= 2
+}
+
 async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
   return createChatCompletion([
     { role: 'system', content: systemPrompt },
@@ -187,18 +209,23 @@ export async function generateNotes(
     const systemPrompt = buildSystemPrompt(lang)
     const userPrompt = buildUserPrompt(transcript, lang)
 
-    // Try up to 3 times — LLMs occasionally emit slightly malformed JSON
-    // (missing braces, wrong keys). A retry with a corrective nudge usually
-    // yields clean JSON, and our parser is tolerant of minor quirks.
+    // Retry malformed JSON and English-only responses: small local models
+    // sometimes ignore the requested output language on the first attempt.
     let lastErr: unknown = null
     for (let attempt = 1; attempt <= 3; attempt++) {
       const correction =
         attempt > 1
-          ? '\n\nNOTE: Your previous response was not valid JSON. Output ONLY a single valid JSON object. Each keyPoints array element MUST be exactly { "heading": "...", "detail": "..." } — do NOT nest other keys. Ensure every { has a matching }. Do not wrap in markdown fences.'
+          ? lang === 'hinglish'
+            ? '\n\nCORRECTION: The previous answer was not valid Hinglish because it contained English-only lines. Rewrite EVERY title, summary, heading, and detail in Pakistani Roman Urdu/Hinglish. EACH individual line must use Roman Urdu grammar; no keyPoint may remain an English sentence. Use Latin letters only and natural words such as hai, hain, ka, ki, ko, se, aur, mein, and liye. Keep technical nouns in English if needed. Example: "Water supports digestion" => "Pani digestion mein help karta hai." Example: "People should drink water regularly" => "Logon ko regular pani peena chahiye." Tags may stay as concise topic labels. Return only the required valid JSON object; every keyPoints item must be { "heading": "...", "detail": "..." }.'
+            : '\n\nNOTE: Your previous response was not valid JSON. Output ONLY a single valid JSON object. Each keyPoints array element MUST be exactly { "heading": "...", "detail": "..." } — do NOT nest other keys. Ensure every { has a matching }. Do not wrap in markdown fences.'
           : ''
       const raw = await callLLM(systemPrompt + correction, userPrompt)
       try {
-        return parseStructuredNote(raw, lang)
+        const note = parseStructuredNote(raw, lang)
+        if (lang === 'hinglish' && !isHinglish(note)) {
+          throw new Error('The local model returned English instead of Hinglish; retrying with a stronger language instruction.')
+        }
+        return note
       } catch (err) {
         lastErr = err
         console.warn(`[generateNotes] parse attempt ${attempt} failed for ${lang}:`, err instanceof Error ? err.message : err)

@@ -30,7 +30,7 @@ if ! curl --silent --fail http://127.0.0.1:11434/api/tags >/dev/null; then
   exit 1
 fi
 
-ollama pull "${OLLAMA_MODEL:-qwen2.5:3b}"
+ollama pull "${OLLAMA_MODEL:-qwen3:4b-instruct}"
 
 model_dir="$(cd "$(dirname "$0")/.." && pwd)/models"
 mkdir -p "$model_dir"
@@ -41,4 +41,4 @@ if [[ ! -s "$whisper_model" ]]; then
   mv "$whisper_model.tmp" "$whisper_model"
 fi
 
-echo "Local AI is ready. Ollama model: ${OLLAMA_MODEL:-qwen2.5:3b}; Whisper model: $whisper_model"
+echo "Local AI is ready. Ollama model: ${OLLAMA_MODEL:-qwen3:4b-instruct}; Whisper model: $whisper_model"

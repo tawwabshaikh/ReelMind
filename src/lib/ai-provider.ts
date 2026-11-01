@@ -76,7 +76,7 @@ export async function transcribeAudioFile(filePath: string): Promise<string> {
 
 export async function createChatCompletion(messages: Array<{ role: 'system' | 'user'; content: string }>): Promise<string> {
   const baseUrl = (process.env.OLLAMA_BASE_URL?.trim() || 'http://127.0.0.1:11434').replace(/\/+$/, '')
-  const model = process.env.OLLAMA_MODEL?.trim() || 'qwen2.5:3b'
+  const model = process.env.OLLAMA_MODEL?.trim() || 'qwen3:4b-instruct'
   let response: Response
   try {
     response = await fetch(`${baseUrl}/api/chat`, {
