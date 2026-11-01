@@ -34,14 +34,13 @@ export function isTheme(v: unknown): v is Theme {
 export interface ThemeMeta {
   id: Theme
   label: string
-  urdu: string
   swatch: string[] // for UI swatch preview
 }
 
 export const THEMES: ThemeMeta[] = [
-  { id: 'emerald', label: 'Emerald', urdu: 'زمردی', swatch: ['#0f2e2a', '#10b981', '#f59e0b'] },
-  { id: 'midnight', label: 'Midnight', urdu: 'نیلی رات', swatch: ['#0b1020', '#6366f1', '#22d3ee'] },
-  { id: 'sunrise', label: 'Sunrise', urdu: 'طلوع آفتاب', swatch: ['#2a0f1f', '#f97316', '#fbbf24'] },
+  { id: 'emerald', label: 'Emerald', swatch: ['#0f2e2a', '#10b981', '#f59e0b'] },
+  { id: 'midnight', label: 'Midnight', swatch: ['#0b1020', '#6366f1', '#22d3ee'] },
+  { id: 'sunrise', label: 'Sunrise', swatch: ['#2a0f1f', '#f97316', '#fbbf24'] },
 ]
 
 interface Palette {

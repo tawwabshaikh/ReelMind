@@ -33,6 +33,7 @@ import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
 import { ShareButton } from '@/components/reel-notes/share-button'
 import { ReelMindLogo, ReelMindWordmark } from '@/components/reel-notes/reelmind-logo'
 import { safeJsonFetch } from '@/lib/safe-fetch'
+import { isLikelyHinglish } from '@/lib/hinglish'
 import type {
   NoteLanguage,
   Theme,
@@ -44,7 +45,7 @@ import type {
   InfographicFile,
 } from '@/lib/types'
 
-type Stage = 'idle' | 'transcribing' | 'generating-notes' | 'done'
+type Stage = 'idle' | 'transcribing' | 'translating-transcript' | 'generating-notes' | 'done'
 
 const STEPS: { key: Stage | 'infographic'; label: string }[] = [
   { key: 'transcribing', label: 'Transcribe' },
@@ -82,7 +83,19 @@ export default function Home() {
   const [compareOpen, setCompareOpen] = useState(false)
   const [compareIds, setCompareIds] = useState<{ a: string | null; b: string | null }>({ a: null, b: null })
 
-  const busy = stage === 'transcribing' || stage === 'generating-notes' || regeneratingNotes
+  const busy = stage === 'transcribing' || stage === 'translating-transcript' || stage === 'generating-notes' || regeneratingNotes
+
+  const translateTranscriptIfNeeded = useCallback(async (text: string, outputLanguage: NoteLanguage) => {
+    if (outputLanguage !== 'hinglish' || isLikelyHinglish(text)) return text
+    const { data, error } = await safeJsonFetch<{ transcript: string }>('/api/translate-transcript', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript: text }),
+    })
+    if (error) throw new Error(error)
+    if (!data?.transcript) throw new Error('Hinglish transcript translation returned no text.')
+    return data.transcript
+  }, [])
 
   // ---- Share-link detection: ?share=<id> loads a read-only note ----
   useEffect(() => {
@@ -97,9 +110,10 @@ export default function Home() {
         const d = data
         const n = d.note
         setSharedMode(true)
-        const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
+        const transcriptText = await translateTranscriptIfNeeded(n.transcript, n.language === 'hinglish' ? 'hinglish' : 'english')
+        const wordCount = transcriptText.split(/\s+/).filter(Boolean).length
         setTranscript({
-          transcript: n.transcript,
+          transcript: transcriptText,
           meta: {
             filename: n.videoName,
             sizeBytes: n.sizeBytes ?? 0,
@@ -127,7 +141,7 @@ export default function Home() {
         toast.error(e instanceof Error ? e.message : 'Failed to load shared note')
       }
     })()
-  }, [])
+  }, [translateTranscriptIfNeeded])
 
   const reset = useCallback(() => {
     setTranscript(null)
@@ -179,8 +193,17 @@ export default function Home() {
       if (error) throw new Error(error)
       if (!data) throw new Error('Transcription returned no data')
       tr = data
+      if (language === 'hinglish' && !isLikelyHinglish(tr.transcript)) {
+        setStage('translating-transcript')
+        const translated = await translateTranscriptIfNeeded(tr.transcript, language)
+        tr = {
+          ...tr,
+          transcript: translated,
+          meta: { ...tr.meta, wordCount: translated.split(/\s+/).filter(Boolean).length },
+        }
+      }
       setTranscript(tr)
-      toast.success(`Transcribed · ${tr.meta.wordCount} words`)
+      toast.success(language === 'hinglish' ? `Hinglish transcript ready · ${tr.meta.wordCount} words` : `Transcribed · ${tr.meta.wordCount} words`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Transcription error'
       setError(msg)
@@ -226,7 +249,7 @@ export default function Home() {
       setStage('idle')
       toast.error(msg)
     }
-  }, [file, language, sourceMode, videoUrl])
+  }, [file, language, sourceMode, videoUrl, translateTranscriptIfNeeded])
 
   const regenerateNotes = useCallback(async () => {
     if (!transcript) return
@@ -238,16 +261,28 @@ export default function Home() {
     setActiveTab('notes')
     setVideoName(transcript.meta.filename)
     try {
+      let transcriptText = transcript.transcript
+      if (language === 'hinglish' && !isLikelyHinglish(transcriptText)) {
+        setStage('translating-transcript')
+        transcriptText = await translateTranscriptIfNeeded(transcriptText, language)
+        const updatedTranscript = {
+          ...transcript,
+          transcript: transcriptText,
+          meta: { ...transcript.meta, wordCount: transcriptText.split(/\s+/).filter(Boolean).length },
+        }
+        setTranscript(updatedTranscript)
+      }
+      setStage('generating-notes')
       const { data, error } = await safeJsonFetch<GenerateNotesResponse>('/api/generate-notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transcript: transcript.transcript,
+          transcript: transcriptText,
           language,
           videoName: transcript.meta.filename,
           durationSec: transcript.meta.durationSec,
           sizeBytes: transcript.meta.sizeBytes,
-          wordCount: transcript.meta.wordCount,
+          wordCount: transcriptText.split(/\s+/).filter(Boolean).length,
         }),
       })
       if (error) throw new Error(error)
@@ -263,8 +298,9 @@ export default function Home() {
       toast.error(msg)
     } finally {
       setRegeneratingNotes(false)
+      setStage('done')
     }
-  }, [transcript, language])
+  }, [transcript, language, translateTranscriptIfNeeded])
 
   const generateInfographic = useCallback(async () => {
     if (!notes) return
@@ -340,9 +376,10 @@ export default function Home() {
       if (!data) throw new Error('Note not found')
       const d = data
       const n = d.note
-      const wordCount = n.wordCount ?? n.transcript.split(/\s+/).filter(Boolean).length
+      const transcriptText = await translateTranscriptIfNeeded(n.transcript, n.language === 'hinglish' ? 'hinglish' : 'english')
+      const wordCount = transcriptText.split(/\s+/).filter(Boolean).length
       setTranscript({
-        transcript: n.transcript,
+        transcript: transcriptText,
         meta: {
           filename: n.videoName,
           sizeBytes: n.sizeBytes ?? 0,
@@ -371,11 +408,11 @@ export default function Home() {
       setError(msg)
       toast.error(msg)
     }
-  }, [])
+  }, [translateTranscriptIfNeeded])
 
   const stageIndex = (() => {
     if (stage === 'idle') return -1
-    if (stage === 'transcribing') return 0
+    if (stage === 'transcribing' || stage === 'translating-transcript') return 0
     if (stage === 'generating-notes') return 1
     if (stage === 'done') return 2
     return 2
@@ -408,6 +445,8 @@ export default function Home() {
   const progressLabel = busy
     ? stage === 'transcribing'
       ? 'Transcribing…'
+      : stage === 'translating-transcript'
+        ? 'Translating transcript to Hinglish…'
       : stage === 'generating-notes'
         ? 'Summarizing…'
         : regeneratingNotes
@@ -457,7 +496,7 @@ export default function Home() {
               Turn every video into <span className="text-accent">knowledge.</span>
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
-              Transcribe videos, generate structured notes, and create shareable visual summaries — in English or Urdu.
+              Transcribe videos, generate structured notes, and create shareable visual summaries — in English. Urdu. Hinglish.
             </p>
             <p className="mt-2 text-xs font-semibold tracking-wide text-accent">
               Learn faster. Remember more.

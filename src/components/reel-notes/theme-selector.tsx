@@ -7,14 +7,13 @@ import type { Theme } from '@/lib/types'
 interface ThemeOption {
   id: Theme
   label: string
-  urdu: string
   swatch: string[]
 }
 
 const OPTIONS: ThemeOption[] = [
-  { id: 'emerald', label: 'Emerald', urdu: 'زمردی', swatch: ['#0f2e2a', '#10b981', '#f59e0b'] },
-  { id: 'midnight', label: 'Midnight', urdu: 'نیلی رات', swatch: ['#0b1020', '#6366f1', '#22d3ee'] },
-  { id: 'sunrise', label: 'Sunrise', urdu: 'طلوع آفتاب', swatch: ['#2a0f1f', '#f97316', '#fbbf24'] },
+  { id: 'emerald', label: 'Emerald', swatch: ['#0f2e2a', '#10b981', '#f59e0b'] },
+  { id: 'midnight', label: 'Midnight', swatch: ['#0b1020', '#6366f1', '#22d3ee'] },
+  { id: 'sunrise', label: 'Sunrise', swatch: ['#2a0f1f', '#f97316', '#fbbf24'] },
 ]
 
 interface Props {
@@ -55,9 +54,6 @@ export function ThemeSelector({ value, onChange, disabled }: Props) {
                 ))}
               </div>
               <span className="text-[11px] font-semibold leading-none">{opt.label}</span>
-              <span className="font-urdu text-[13px] leading-none text-muted-foreground" dir="rtl">
-                {opt.urdu}
-              </span>
               {active && (
                 <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
               )}

@@ -104,3 +104,64 @@ export async function createChatCompletion(messages: Array<{ role: 'system' | 'u
   }
   return content.trim()
 }
+
+const HINGLISH_TRANSCRIPT_PROMPT = `Translate this video transcript into natural Pakistani Hinglish / Roman Urdu.
+Use Latin letters only. Keep English technical terms when natural, but write the sentence grammar in Roman Urdu.
+Translate every sentence faithfully. Do not summarize, skip, or add information.
+Return only valid JSON in this exact shape: {"translation":"..."}
+Examples:
+- "Water regulates body temperature and supports digestion." => "Pani body temperature ko control karta hai aur digestion mein madad deta hai."
+- "It supports digestion." => "Yeh digestion mein madad deta hai."
+- "People should drink water regularly." => "Logon ko rozana pani peena chahiye."
+- "Dehydration can cause headaches." => "Pani ki kami se sar dard ho sakta hai."`
+
+function splitTranscript(text: string, maxWords = 650): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const chunks: string[] = []
+  for (let i = 0; i < words.length; i += maxWords) {
+    chunks.push(words.slice(i, i + maxWords).join(' '))
+  }
+  return chunks
+}
+
+export async function translateTranscriptToHinglish(transcript: string): Promise<string> {
+  const chunks = splitTranscript(transcript)
+  if (chunks.length === 0) throw new AIProviderError('Transcript is empty; nothing to translate.', 400)
+
+  const translated: string[] = []
+  for (let index = 0; index < chunks.length; index++) {
+    let lastError: unknown
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const raw = await createChatCompletion([
+          {
+            role: 'system',
+            content: HINGLISH_TRANSCRIPT_PROMPT + (attempt > 1
+              ? '\nThe last answer was too English-heavy. Rewrite it in Roman Urdu/Hinglish, with words like hai, hain, ka, ko, se, aur, mein, and chahiye in each sentence.'
+              : ''),
+          },
+          { role: 'user', content: `Translate this transcript chunk without shortening it:\n\n${chunks[index]}` },
+        ])
+        const firstBrace = raw.indexOf('{')
+        const lastBrace = raw.lastIndexOf('}')
+        const parsed = JSON.parse(firstBrace >= 0 && lastBrace > firstBrace ? raw.slice(firstBrace, lastBrace + 1) : raw) as { translation?: unknown }
+        const result = typeof parsed.translation === 'string' ? parsed.translation.trim() : ''
+        if (!result) throw new Error('The Hinglish translator returned empty text.')
+        if (/[\u0600-\u06ff\u0750-\u077f\u0900-\u097f]/u.test(result)) {
+          throw new Error('The Hinglish translator used a non-Latin script.')
+        }
+        translated.push(result)
+        lastError = null
+        break
+      } catch (error) {
+        lastError = error
+      }
+    }
+    if (lastError) {
+      const detail = lastError instanceof Error ? lastError.message : String(lastError)
+      throw new AIProviderError(`Could not translate transcript chunk ${index + 1} to Hinglish. ${detail}`, 502)
+    }
+  }
+
+  return translated.join(' ').replace(/\s+/g, ' ').trim()
+}
