@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
+import { isLikelyUrdu } from './hinglish'
 
 export class AIProviderError extends Error {
   constructor(message: string, readonly status = 503) {
@@ -115,6 +116,14 @@ Examples:
 - "People should drink water regularly." => "Logon ko rozana pani peena chahiye."
 - "Dehydration can cause headaches." => "Pani ki kami se sar dard ho sakta hai."`
 
+const URDU_TRANSCRIPT_PROMPT = `Translate this full video transcript into natural Pakistani Urdu, written in Urdu Nastaliq/Arabic-Persian script.
+Use Urdu script throughout. Do not write Roman Urdu, Devanagari, or English sentences. Translate every sentence faithfully; do not summarize, skip, or add facts.
+Return only valid JSON in this exact shape: {"translation":"..."}
+Examples:
+- "Water supports digestion." => "پانی ہاضمے میں مدد دیتا ہے۔"
+- "People should drink water regularly." => "لوگوں کو باقاعدگی سے پانی پینا چاہیے۔"
+- "Dehydration can cause headaches." => "پانی کی کمی سے سر درد ہو سکتا ہے۔"`
+
 function splitTranscript(text: string, maxWords = 650): string[] {
   const words = text.split(/\s+/).filter(Boolean)
   const chunks: string[] = []
@@ -124,7 +133,7 @@ function splitTranscript(text: string, maxWords = 650): string[] {
   return chunks
 }
 
-export async function translateTranscriptToHinglish(transcript: string): Promise<string> {
+export async function translateTranscript(transcript: string, language: 'urdu' | 'hinglish'): Promise<string> {
   const chunks = splitTranscript(transcript)
   if (chunks.length === 0) throw new AIProviderError('Transcript is empty; nothing to translate.', 400)
 
@@ -136,8 +145,10 @@ export async function translateTranscriptToHinglish(transcript: string): Promise
         const raw = await createChatCompletion([
           {
             role: 'system',
-            content: HINGLISH_TRANSCRIPT_PROMPT + (attempt > 1
-              ? '\nThe last answer was too English-heavy. Rewrite it in Roman Urdu/Hinglish, with words like hai, hain, ka, ko, se, aur, mein, and chahiye in each sentence.'
+            content: (language === 'urdu' ? URDU_TRANSCRIPT_PROMPT : HINGLISH_TRANSCRIPT_PROMPT) + (attempt > 1
+              ? language === 'urdu'
+                ? '\nThe last answer used the wrong language or script. Rewrite the entire transcript in Urdu script. Example: "People should drink water regularly." => "لوگوں کو باقاعدگی سے پانی پینا چاہیے۔"'
+                : '\nThe last answer was too English-heavy. Rewrite it in Roman Urdu/Hinglish, with words like hai, hain, ka, ko, se, aur, mein, and chahiye in each sentence.'
               : ''),
           },
           { role: 'user', content: `Translate this transcript chunk without shortening it:\n\n${chunks[index]}` },
@@ -147,8 +158,11 @@ export async function translateTranscriptToHinglish(transcript: string): Promise
         const parsed = JSON.parse(firstBrace >= 0 && lastBrace > firstBrace ? raw.slice(firstBrace, lastBrace + 1) : raw) as { translation?: unknown }
         const result = typeof parsed.translation === 'string' ? parsed.translation.trim() : ''
         if (!result) throw new Error('The Hinglish translator returned empty text.')
-        if (/[\u0600-\u06ff\u0750-\u077f\u0900-\u097f]/u.test(result)) {
+        if (language === 'hinglish' && /[\u0600-\u06ff\u0750-\u077f\u0900-\u097f]/u.test(result)) {
           throw new Error('The Hinglish translator used a non-Latin script.')
+        }
+        if (language === 'urdu' && !isLikelyUrdu(result)) {
+          throw new Error('The Urdu translator did not use Urdu script.')
         }
         translated.push(result)
         lastError = null
@@ -159,7 +173,8 @@ export async function translateTranscriptToHinglish(transcript: string): Promise
     }
     if (lastError) {
       const detail = lastError instanceof Error ? lastError.message : String(lastError)
-      throw new AIProviderError(`Could not translate transcript chunk ${index + 1} to Hinglish. ${detail}`, 502)
+      const languageName = language === 'urdu' ? 'Urdu' : 'Hinglish'
+      throw new AIProviderError(`Could not translate transcript chunk ${index + 1} to ${languageName}. ${detail}`, 502)
     }
   }
 

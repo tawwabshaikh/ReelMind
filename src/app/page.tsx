@@ -33,7 +33,7 @@ import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
 import { ShareButton } from '@/components/reel-notes/share-button'
 import { ReelMindLogo, ReelMindWordmark } from '@/components/reel-notes/reelmind-logo'
 import { safeJsonFetch } from '@/lib/safe-fetch'
-import { isLikelyHinglish } from '@/lib/hinglish'
+import { isLikelyHinglish, isLikelyUrdu } from '@/lib/hinglish'
 import type {
   NoteLanguage,
   Theme,
@@ -86,14 +86,19 @@ export default function Home() {
   const busy = stage === 'transcribing' || stage === 'translating-transcript' || stage === 'generating-notes' || regeneratingNotes
 
   const translateTranscriptIfNeeded = useCallback(async (text: string, outputLanguage: NoteLanguage) => {
-    if (outputLanguage !== 'hinglish' || isLikelyHinglish(text)) return text
+    const alreadyInLanguage = outputLanguage === 'hinglish'
+      ? isLikelyHinglish(text)
+      : outputLanguage === 'urdu'
+        ? isLikelyUrdu(text)
+        : true
+    if (alreadyInLanguage) return text
     const { data, error } = await safeJsonFetch<{ transcript: string }>('/api/translate-transcript', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript: text }),
+      body: JSON.stringify({ transcript: text, language: outputLanguage }),
     })
     if (error) throw new Error(error)
-    if (!data?.transcript) throw new Error('Hinglish transcript translation returned no text.')
+    if (!data?.transcript) throw new Error(`${outputLanguage === 'urdu' ? 'Urdu' : 'Hinglish'} transcript translation returned no text.`)
     return data.transcript
   }, [])
 
@@ -110,7 +115,8 @@ export default function Home() {
         const d = data
         const n = d.note
         setSharedMode(true)
-        const transcriptText = await translateTranscriptIfNeeded(n.transcript, n.language === 'hinglish' ? 'hinglish' : 'english')
+        const noteLanguage = n.language === 'urdu' || n.language === 'hinglish' ? n.language : 'english'
+        const transcriptText = await translateTranscriptIfNeeded(n.transcript, noteLanguage)
         const wordCount = transcriptText.split(/\s+/).filter(Boolean).length
         setTranscript({
           transcript: transcriptText,
@@ -193,7 +199,7 @@ export default function Home() {
       if (error) throw new Error(error)
       if (!data) throw new Error('Transcription returned no data')
       tr = data
-      if (language === 'hinglish' && !isLikelyHinglish(tr.transcript)) {
+      if ((language === 'hinglish' && !isLikelyHinglish(tr.transcript)) || (language === 'urdu' && !isLikelyUrdu(tr.transcript))) {
         setStage('translating-transcript')
         const translated = await translateTranscriptIfNeeded(tr.transcript, language)
         tr = {
@@ -203,9 +209,9 @@ export default function Home() {
         }
       }
       setTranscript(tr)
-      toast.success(language === 'hinglish' ? `Hinglish transcript ready · ${tr.meta.wordCount} words` : `Transcribed · ${tr.meta.wordCount} words`)
+      toast.success(language === 'english' ? `Transcribed · ${tr.meta.wordCount} words` : `${language === 'urdu' ? 'Urdu' : 'Hinglish'} transcript ready · ${tr.meta.wordCount} words`)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Transcription error'
+      const msg = e instanceof Error ? e.message : 'Transcription/translation error'
       setError(msg)
       setStage('idle')
       toast.error(msg)
@@ -262,7 +268,7 @@ export default function Home() {
     setVideoName(transcript.meta.filename)
     try {
       let transcriptText = transcript.transcript
-      if (language === 'hinglish' && !isLikelyHinglish(transcriptText)) {
+      if ((language === 'hinglish' && !isLikelyHinglish(transcriptText)) || (language === 'urdu' && !isLikelyUrdu(transcriptText))) {
         setStage('translating-transcript')
         transcriptText = await translateTranscriptIfNeeded(transcriptText, language)
         const updatedTranscript = {
@@ -376,7 +382,8 @@ export default function Home() {
       if (!data) throw new Error('Note not found')
       const d = data
       const n = d.note
-      const transcriptText = await translateTranscriptIfNeeded(n.transcript, n.language === 'hinglish' ? 'hinglish' : 'english')
+      const noteLanguage = n.language === 'urdu' || n.language === 'hinglish' ? n.language : 'english'
+      const transcriptText = await translateTranscriptIfNeeded(n.transcript, noteLanguage)
       const wordCount = transcriptText.split(/\s+/).filter(Boolean).length
       setTranscript({
         transcript: transcriptText,
@@ -446,7 +453,7 @@ export default function Home() {
     ? stage === 'transcribing'
       ? 'Transcribing…'
       : stage === 'translating-transcript'
-        ? 'Translating transcript to Hinglish…'
+        ? `Translating transcript to ${language === 'urdu' ? 'Urdu' : 'Hinglish'}…`
       : stage === 'generating-notes'
         ? 'Summarizing…'
         : regeneratingNotes
