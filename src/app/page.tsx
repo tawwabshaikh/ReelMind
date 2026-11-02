@@ -574,7 +574,7 @@ export default function Home() {
               Learn faster. Remember more.
             </p>
           </div>
-          <div className="hero-art hidden shrink-0 xl:block" aria-hidden="true">
+          <div className="hero-art hidden shrink-0 lg:block" aria-hidden="true">
             <Image
               src="/hero-video-knowledge.svg"
               alt="A video transforming into notes, a transcript, and an infographic"

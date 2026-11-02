@@ -222,8 +222,9 @@
 /* Video-to-knowledge illustration in the open desktop hero space. */
 .hero-art {
   position: relative;
-  width: 390px;
-  height: 244px;
+  width: min(33vw, 390px);
+  height: auto;
+  aspect-ratio: 8 / 5;
   margin-right: 12px;
 }
 .hero-art-image { display: block; width: 100%; height: 100%; object-fit: contain; }
