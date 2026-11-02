@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthSessionProvider } from "@/components/session-provider";
 
 const inter = localFont({
   src: "./fonts/inter-latin-400.woff2",
@@ -14,7 +15,7 @@ const inter = localFont({
 
 export const metadata: Metadata = {
   title: "ReelMind — Turn videos into knowledge",
-  description: "Transcribe videos, generate structured notes, and create shareable visual summaries — in English or Urdu.",
+  description: "Transcribe videos, generate structured notes, and create shareable visual summaries — in English. Urdu. Hinglish",
   keywords: ["video to notes", "AI learning", "transcription", "Urdu notes", "bilingual notes", "infographic", "knowledge"],
   authors: [{ name: "ReelMind" }],
   icons: {
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
 },
   openGraph: {
     title: "ReelMind — Turn videos into knowledge",
-    description: "Transcribe videos, generate structured notes, and create shareable visual summaries — in English or Urdu.",
+    description: "Transcribe videos, generate structured notes, and create shareable visual summaries — in English. Urdu. Hinglish.",
     type: "website",
   },
 };
@@ -37,11 +38,13 @@ export default function RootLayout({
       <body
         className={`${inter.variable} antialiased bg-background text-foreground`}
       >
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
-          <Toaster />
-          <SonnerToaster richColors position="top-right" />
-        </ThemeProvider>
+        <AuthSessionProvider>
+          <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+            {children}
+            <Toaster />
+            <SonnerToaster richColors position="top-right" />
+          </ThemeProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

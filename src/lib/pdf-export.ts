@@ -1,10 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, type RGB } from 'pdf-lib'
-import { promises as fs } from 'fs'
-import path from 'path'
 import type { StructuredNote } from './types'
 import { renderNotesSheetPng } from './infographic'
 
-const OUTPUT_DIR = path.join(process.cwd(), 'public', 'generated')
 
 // A4 portrait in points (1pt = 1/72 inch). A4 = 595.28 × 841.89
 const PAGE_W = 595.28
@@ -99,17 +96,16 @@ function drawParagraph(
 
 export interface ExportPdfInput {
   note: StructuredNote
-  infographicUrl: string | null // local /generated/<file> path or null
+  infographicBytes: Uint8Array | null
   videoName: string
 }
 
 /**
  * Build a polished multi-page PDF: page 1 = the notes (title, summary, key
  * points, tags), page 2 = the infographic PNG (if provided) scaled to fit.
- * Returns the filename written to /public/generated/.
+ * Returns PDF bytes; the route persists them in private artifact storage.
  */
-export async function exportNotePdf(input: ExportPdfInput): Promise<string> {
-  await fs.mkdir(OUTPUT_DIR, { recursive: true })
+export async function exportNotePdf(input: ExportPdfInput): Promise<Uint8Array> {
   const pdf = await PDFDocument.create()
   const regular = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
@@ -306,15 +302,9 @@ export async function exportNotePdf(input: ExportPdfInput): Promise<string> {
   } // end of English drawn-text branch
 
   // -------- Page 2: Infographic (if provided) --------
-  if (input.infographicUrl) {
-    const filename = input.infographicUrl.replace(/^\/?generated\//, '')
-    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/.test(filename)) {
-      throw new Error('Infographic must be a generated PNG from this workspace.')
-    }
-    const localPath = path.join(OUTPUT_DIR, filename)
+  if (input.infographicBytes) {
     try {
-      const pngBytes = await fs.readFile(localPath)
-      const png = await pdf.embedPng(pngBytes)
+      const png = await pdf.embedPng(input.infographicBytes)
       const imgPage = pdf.addPage([PAGE_W, PAGE_H])
       // Scale to fit with margin
       const maxW = PAGE_W - MARGIN * 2
@@ -345,8 +335,5 @@ export async function exportNotePdf(input: ExportPdfInput): Promise<string> {
     }
   }
 
-  const bytes = await pdf.save()
-  const filename = `pdf-${note.language}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`
-  await fs.writeFile(path.join(OUTPUT_DIR, filename), bytes)
-  return filename
+  return pdf.save()
 }

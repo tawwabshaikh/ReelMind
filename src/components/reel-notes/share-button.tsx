@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { safeJsonFetch } from '@/lib/safe-fetch'
 
 interface Props {
   noteId: string | null
@@ -25,15 +26,19 @@ interface Props {
 export function ShareButton({ noteId, videoName, variant = 'icon', disabled }: Props) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-
-  const shareUrl = noteId
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/?share=${noteId}`
-    : ''
+  const [shareUrl, setShareUrl] = useState('')
 
   const handleCopy = async () => {
-    if (!shareUrl) return
     try {
-      await navigator.clipboard.writeText(shareUrl)
+      let link = shareUrl
+      if (!link && noteId) {
+        const { data, error } = await safeJsonFetch<{ url: string }>(`/api/notes/${noteId}/share`, { method: 'POST' })
+        if (error || !data?.url) throw new Error(error || 'Could not create a share link.')
+        link = data.url
+        setShareUrl(link)
+      }
+      if (!link) return
+      await navigator.clipboard.writeText(link)
       setCopied(true)
       toast.success('Share link copied to clipboard')
       setTimeout(() => setCopied(false), 2000)
@@ -86,7 +91,7 @@ export function ShareButton({ noteId, videoName, variant = 'icon', disabled }: P
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2">
-            <Input readOnly value={shareUrl} className="font-mono text-xs" />
+            <Input readOnly value={shareUrl || 'Copy to create a private share link'} className="font-mono text-xs" />
             <Button size="icon" onClick={handleCopy} className="shrink-0" aria-label="Copy link">
               {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </Button>

@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" fill="none">
+  <defs>
+    <linearGradient id="wash" x1="110" y1="50" x2="551" y2="365" gradientUnits="userSpaceOnUse"><stop stop-color="#DDFBF0"/><stop offset="1" stop-color="#B9F2DF"/></linearGradient>
+    <linearGradient id="screen" x1="174" y1="85" x2="209" y2="353" gradientUnits="userSpaceOnUse"><stop stop-color="#4A8FC2"/><stop offset=".47" stop-color="#E6B8C5"/><stop offset="1" stop-color="#183D55"/></linearGradient>
+    <linearGradient id="hill" x1="120" y1="248" x2="287" y2="345" gradientUnits="userSpaceOnUse"><stop stop-color="#427FC0"/><stop offset="1" stop-color="#183F5A"/></linearGradient>
+    <linearGradient id="play" x1="293" y1="210" x2="358" y2="270" gradientUnits="userSpaceOnUse"><stop stop-color="#2AD696"/><stop offset="1" stop-color="#06A875"/></linearGradient>
+    <linearGradient id="card" x1="403" y1="73" x2="593" y2="169" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#F7FCFF"/></linearGradient>
+    <filter id="shadow" x="37" y="36" width="590" height="344" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="11"/></filter>
+    <filter id="cardShadow" x="365" y="53" width="270" height="322" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#167C61" flood-opacity=".16"/></filter>
+    <clipPath id="screenClip"><rect x="104" y="75" width="171" height="268" rx="27"/></clipPath>
+  </defs>
+  <style>
+    @keyframes phone-float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-4px) rotate(.35deg); } }
+    @keyframes cards-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+    @keyframes play-glow { 0%,100% { opacity: 1; } 50% { opacity: .78; } }
+    @keyframes arrow-flow { 0%,100% { opacity: .82; } 50% { opacity: 1; } }
+    @keyframes travel { to { stroke-dashoffset: -28; } }
+    @keyframes stage-focus { 0%,5% { opacity: 0; } 9%,23% { opacity: .9; } 27%,100% { opacity: 0; } }
+    @keyframes label-show { 0%,5% { opacity: 0; } 9%,23% { opacity: 1; } 27%,100% { opacity: 0; } }
+    .phone-float { transform-box: fill-box; transform-origin: center; animation: phone-float 6.5s ease-in-out infinite; }
+    .outputs-float { transform-box: fill-box; transform-origin: center; animation: cards-float 7s ease-in-out 1s infinite; }
+    .play-pulse { animation: play-glow 3.6s ease-in-out infinite; }
+    .arrow-flow { animation: arrow-flow 4s ease-in-out infinite; }
+    .travel-dots { animation: travel 1.5s linear infinite; }
+    .stage-outline { opacity: 0; animation: stage-focus 9s ease-in-out infinite; }
+    .stage-transcript { animation-delay: 0s; }
+    .stage-notes { animation-delay: 3s; }
+    .stage-infographic { animation-delay: 6s; }
+    .stage-label { opacity: 0; animation: label-show 9s ease-in-out infinite; }
+    .label-transcript { animation-delay: 0s; }
+    .label-notes { animation-delay: 3s; }
+    .label-infographic { animation-delay: 6s; }
+    @media (prefers-reduced-motion: reduce) { .phone-float, .outputs-float, .play-pulse, .arrow-flow, .travel-dots, .stage-outline, .stage-label { animation: none !important; } .stage-outline { opacity: 0 !important; } .label-transcript { opacity: 1 !important; } }
+  </style>
+  <ellipse cx="323" cy="215" rx="283" ry="165" fill="url(#wash)" opacity=".78"/>
+  <ellipse cx="318" cy="356" rx="260" ry="13" fill="#45CFA0" opacity=".12" filter="url(#shadow)"/>
+
+  <!-- Phone playing a social video -->
+  <g class="phone-float">
+  <g transform="rotate(-5 191 205)">
+    <rect x="78" y="48" width="222" height="318" rx="43" fill="#0A2638"/>
+    <rect x="84" y="54" width="210" height="306" rx="39" stroke="#78D9CD" stroke-width="3"/>
+    <rect x="104" y="75" width="171" height="268" rx="27" fill="url(#screen)"/>
+    <g clip-path="url(#screenClip)">
+      <circle cx="237" cy="139" r="23" fill="#FFDCAA" opacity=".96"/>
+      <path d="m85 253 56-44 27 16 44-60 71 60v137H85V253Z" fill="#6F94CA"/>
+      <path d="m101 251 37-33 18 14 51-59 78 60v119H101V251Z" fill="#416FA5"/>
+      <path d="m79 275 55-38 30 17 39-33 36 34 46 22v83H79v-85Z" fill="url(#hill)"/>
+      <path d="M85 316c40-18 68-5 101-20 36-16 55 6 102-12v69H85v-37Z" fill="#536846"/>
+      <path d="M88 329c44-13 80 7 116-8 31-13 53-2 85-14v46H88v-24Z" fill="#263F38"/>
+      <rect x="116" y="94" width="53" height="7" rx="3.5" fill="white" opacity=".95"/>
+      <rect x="116" y="108" width="35" height="7" rx="3.5" fill="white" opacity=".75"/>
+      <rect x="118" y="314" width="145" height="7" rx="3.5" fill="white" opacity=".48"/>
+      <rect x="118" y="314" width="57" height="7" rx="3.5" fill="white"/>
+      <path d="M243 258c-9-9-22 4-9 15l9 8 9-8c13-11 0-24-9-15Z" stroke="white" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="243" cy="298" r="10" stroke="white" stroke-width="3"/>
+      <path d="m239 306 8 8" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <rect x="158" y="350" width="40" height="5" rx="2.5" fill="#31586A"/>
+  </g>
+  </g>
+
+  <!-- Conversion arrow and play tile -->
+  <g class="arrow-flow">
+  <path d="M282 202c22-39 53-54 83-47" stroke="#0AA66E" stroke-width="7" stroke-linecap="round"/>
+  <path d="m354 143 16 11-16 11" stroke="#0AA66E" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="travel-dots" d="M282 202c22-39 53-54 83-47" stroke="#D9FFF0" stroke-width="4" stroke-linecap="round" stroke-dasharray="1 15"/>
+  </g>
+  <g class="play-pulse">
+  <rect x="282" y="211" width="75" height="70" rx="21" fill="white" opacity=".75"/>
+  <rect x="291" y="220" width="57" height="51" rx="16" fill="url(#play)"/>
+  <path d="m314 233 17 12-17 12v-24Z" fill="white"/>
+  <path d="m281 204 5-11m6 11 7-8m-8 17 11-3" stroke="#078A5A" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- Three generated learning assets -->
+  <g class="outputs-float">
+  <g filter="url(#cardShadow)">
+    <rect x="387" y="66" width="227" height="86" rx="22" fill="url(#card)"/>
+    <rect x="387" y="162" width="227" height="86" rx="22" fill="url(#card)"/>
+    <rect x="387" y="258" width="227" height="86" rx="22" fill="url(#card)"/>
+  <rect class="stage-outline stage-notes" x="388.5" y="67.5" width="224" height="83" rx="21" stroke="#07A66C" stroke-width="3"/>
+  <rect class="stage-outline stage-transcript" x="388.5" y="163.5" width="224" height="83" rx="21" stroke="#07A66C" stroke-width="3"/>
+  <rect class="stage-outline stage-infographic" x="388.5" y="259.5" width="224" height="83" rx="21" stroke="#07A66C" stroke-width="3"/>
+  </g>
+  <!-- Notes icon -->
+  <path d="M412 91h25l12 12v31h-37V91Z" stroke="#08A568" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M437 92v12h12m-28 8h20m-20 9h20" stroke="#08A568" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="465" y="108" fill="#101B34" font-family="Arial, sans-serif" font-size="19" font-weight="700">Notes</text>
+  <rect x="465" y="119" width="119" height="6" rx="3" fill="#BED4E0"/>
+  <rect x="465" y="132" width="101" height="6" rx="3" fill="#BED4E0"/>
+  <!-- Transcript icon -->
+  <rect x="411" y="183" width="39" height="39" rx="7" stroke="#08A568" stroke-width="4"/>
+  <path d="M424 192h14m-7 0v21" stroke="#08A568" stroke-width="4" stroke-linecap="round"/>
+  <text x="465" y="200" fill="#101B34" font-family="Arial, sans-serif" font-size="18" font-weight="700">Transcript</text>
+  <rect x="465" y="211" width="125" height="6" rx="3" fill="#BED4E0"/>
+  <rect x="465" y="224" width="99" height="6" rx="3" fill="#BED4E0"/>
+  <!-- Infographic icon -->
+  <rect x="411" y="311" width="9" height="17" rx="2" fill="#08A568"/>
+  <rect x="425" y="300" width="9" height="28" rx="2" fill="#08A568"/>
+  <rect x="439" y="287" width="9" height="41" rx="2" fill="#08A568"/>
+  <path d="M408 330h44" stroke="#70CDA7" stroke-width="2" stroke-linecap="round"/>
+  <text x="465" y="298" fill="#101B34" font-family="Arial, sans-serif" font-size="17" font-weight="700">Infographic</text>
+  <rect x="465" y="309" width="105" height="6" rx="3" fill="#BED4E0"/>
+  <rect x="465" y="322" width="76" height="6" rx="3" fill="#BED4E0"/>
+  <path d="M581 307a18 18 0 1 0 18 18h-18v-18Z" fill="#27C77E"/>
+  <path d="M585 303v17h17a18 18 0 0 0-17-17Z" fill="#078F66"/>
+  <path d="m575 55 2-11m13 13 8-9m-1 20 11-3" stroke="#078A5A" stroke-width="4" stroke-linecap="round"/>
+  <!-- A small live status label cycles through the real product steps. -->
+  <rect x="387" y="355" width="226" height="29" rx="14.5" fill="white" fill-opacity=".92" stroke="#D7EFE5"/>
+  <circle cx="402" cy="369.5" r="4" fill="#13B981"/>
+  <circle cx="402" cy="369.5" r="7" stroke="#13B981" stroke-opacity=".28" stroke-width="2"/>
+  <text class="stage-label label-transcript" x="414" y="373" fill="#087D58" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing=".3">TRANSCRIBING VIDEO</text>
+  <text class="stage-label label-notes" x="414" y="373" fill="#087D58" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing=".3">CREATING SMART NOTES</text>
+  <text class="stage-label label-infographic" x="414" y="373" fill="#087D58" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing=".3">BUILDING INFOGRAPHIC</text>
+  </g>
+</svg>

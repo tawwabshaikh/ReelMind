@@ -106,6 +106,20 @@ function platformForUrl(url: URL): string | null {
   return SOCIAL_VIDEO_DOMAINS.find(({ domain }) => host === domain || host.endsWith(`.${domain}`))?.label ?? null
 }
 
+/** Validates an input URL before handing it to an external processing worker. */
+export async function validateVideoUrl(input: string): Promise<URL> {
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(input.trim())
+  } catch {
+    throw new VideoUrlError('Enter a valid video URL.')
+  }
+  if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || parsedUrl.port) {
+    throw new VideoUrlError('Use a public HTTPS video link.')
+  }
+  return platformForUrl(parsedUrl) ? parsedUrl : validatePublicHttpsUrl(parsedUrl.toString())
+}
+
 interface ProcessResult {
   code: number | null
   stdout: string
@@ -230,15 +244,7 @@ export async function downloadVideoUrl(
   destination: string,
   maxBytes: number,
 ): Promise<{ filename: string; sizeBytes: number; path: string }> {
-  let parsedUrl: URL
-  try {
-    parsedUrl = new URL(input.trim())
-  } catch {
-    throw new VideoUrlError('Enter a valid video URL.')
-  }
-  if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || parsedUrl.port) {
-    throw new VideoUrlError('Use a public HTTPS video link.')
-  }
+  const parsedUrl = await validateVideoUrl(input)
   if (platformForUrl(parsedUrl)) {
     return runYtDlp(parsedUrl, path.dirname(destination), maxBytes)
   }

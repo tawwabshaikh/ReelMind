@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import { promises as fs } from 'fs'
-import path from 'path'
 import { db } from '@/lib/db'
+import { currentUserId, noteOwnerScope } from '@/lib/session'
 import { renderNotesSheetPng } from '@/lib/infographic'
 import { structuredNoteToMarkdown } from '@/lib/notes'
 import type { StructuredNote } from '@/lib/types'
+import { makeArtifactKey, readArtifactBytes, storeArtifact } from '@/lib/artifact-storage'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -30,10 +30,13 @@ const MUTED = hexToRgb('#64748b')
  */
 export async function POST(req: NextRequest) {
   try {
+    const userId = await currentUserId()
+    if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     const body = (await req.json().catch(() => ({}))) as { language?: string }
     const langFilter = body?.language // 'english' | 'urdu' | 'hinglish' | undefined (all)
 
     const rows = await db.note.findMany({
+      where: noteOwnerScope(userId),
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -148,8 +151,8 @@ export async function POST(req: NextRequest) {
         // Infographic page
         if (infographicFilename) {
           try {
-            const pngPath = path.join(process.cwd(), 'public', 'generated', infographicFilename)
-            const pngBytes = await fs.readFile(pngPath)
+            const pngBytes = await readArtifactBytes(infographicFilename)
+            if (!pngBytes) return
             const png = await pdf.embedPng(pngBytes)
             const p = pdf.addPage([PAGE_W, PAGE_H])
             const maxW = PAGE_W - MARGIN * 2
@@ -179,14 +182,14 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = await pdf.save()
-    const outputDir = path.join(process.cwd(), 'public', 'generated')
-    await fs.mkdir(outputDir, { recursive: true })
     const filename = `pdf-all-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`
-    await fs.writeFile(path.join(outputDir, filename), bytes)
+    const storageKey = makeArtifactKey(userId, filename)
+    await storeArtifact(storageKey, bytes, 'application/pdf')
+    const artifact = await db.artifact.create({ data: { userId, storageKey, filename, contentType: 'application/pdf' }, select: { id: true } })
 
     return NextResponse.json({
       filename,
-      url: `/generated/${filename}`,
+      url: `/api/files/${artifact.id}`,
       notes: noteIndex,
       pages: pdf.getPageCount(),
     })

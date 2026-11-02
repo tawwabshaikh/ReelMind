@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { StructuredNote } from '@/lib/types'
+import { currentUserId, noteOwnerScope } from '@/lib/session'
 
 export const runtime = 'nodejs'
 
@@ -26,9 +27,11 @@ function extractTags(json: string | null): string[] {
  */
 export async function GET(req: NextRequest) {
   try {
+    const userId = await currentUserId()
+    if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     const showTrash = new URL(req.url).searchParams.get('trash') === '1'
     const rows = await db.note.findMany({
-      where: showTrash ? { deletedAt: { not: null } } : { deletedAt: null },
+      where: { ...noteOwnerScope(userId), ...(showTrash ? { deletedAt: { not: null } } : { deletedAt: null }) },
       orderBy: showTrash ? { deletedAt: 'desc' } : { createdAt: 'desc' },
       take: 50,
       select: {
@@ -64,9 +67,9 @@ export async function GET(req: NextRequest) {
         hasEnglishInfographic: !!r.infographicEn,
         hasUrduInfographic: !!r.infographicUr,
         hasHinglishInfographic: !!r.infographicHi,
-        infographicEnUrl: r.infographicEn ? `/generated/${r.infographicEn}` : null,
-        infographicUrUrl: r.infographicUr ? `/generated/${r.infographicUr}` : null,
-        infographicHiUrl: r.infographicHi ? `/generated/${r.infographicHi}` : null,
+        infographicEnUrl: r.infographicEn ? `/api/notes/${r.id}/asset?language=english` : null,
+        infographicUrUrl: r.infographicUr ? `/api/notes/${r.id}/asset?language=urdu` : null,
+        infographicHiUrl: r.infographicHi ? `/api/notes/${r.id}/asset?language=hinglish` : null,
         tags,
         durationSec: r.durationSec,
         wordCount: r.wordCount,

@@ -1,0 +1,70 @@
+// Prisma schema for Reel → Notes (bilingual + infographic)
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-postgres"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  // Source video metadata
+  videoName String
+  // Selected language mode: "english" | "urdu" | "hinglish" ("both" is legacy)
+  language  String
+  // Raw transcript from ASR
+  transcript String
+  // Source media metrics (so reloaded history shows full stats)
+  durationSec Float?
+  sizeBytes   Int?
+  wordCount   Int?
+  // Structured notes (JSON string of {title, summary, keyPoints[], tags[], markdown})
+  notesEn   String?
+  notesUr   String?
+  notesHi   String?
+  // Private artifact storage keys for generated infographics.
+  infographicEn String?
+  infographicUr String?
+  infographicHi String?
+  createdAt DateTime @default(now())
+  // Soft-delete: when set, the note is in the trash (excluded from the default
+  // history list) but can be restored or permanently deleted.
+  deletedAt DateTime?
+  // Google OAuth subject owning this private generation.
+  userId    String?
+  shareToken String? @unique
+
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@index([userId, createdAt])
+}
+
+model Artifact {
+  id          String   @id @default(cuid())
+  userId      String
+  noteId      String?
+  storageKey  String   @unique
+  filename    String
+  contentType String
+  shareToken  String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([noteId])
+  @@index([shareToken])
+}
+
+model ProcessingJob {
+  id          String   @id @default(cuid())
+  userId      String
+  workerJobId String?
+  status      String   @default("queued")
+  resultJson  String?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

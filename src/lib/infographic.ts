@@ -1,11 +1,10 @@
-import { chromium } from 'playwright'
-import { promises as fs } from 'fs'
 import path from 'path'
 import { StructuredNote } from './notes'
 import { colorForTag, shade, hexToRgbTriplet } from './tag-colors'
+import { makeArtifactKey, storeArtifact } from './artifact-storage'
+import { launchBrowser } from './browser'
 
 const FONT_DIR = path.join(process.cwd(), 'public', 'fonts')
-const OUTPUT_DIR = path.join(process.cwd(), 'public', 'generated')
 
 const NASTALIQ_REGULAR = path.join(FONT_DIR, 'NotoNastaliqUrdu-Regular.ttf')
 const NASTALIQ_BOLD = path.join(FONT_DIR, 'NotoNastaliqUrdu-Bold.ttf')
@@ -410,19 +409,14 @@ function buildInfographicHtml(note: StructuredNote, theme: Theme): string {
 // Rendering
 // ---------------------------------------------------------------------------
 
-async function ensureOutputDir(): Promise<void> {
-  await fs.mkdir(OUTPUT_DIR, { recursive: true })
-}
-
 /**
  * Render a structured note into a PNG infographic (1080×1350).
- * Returns the filename (served from /generated/<filename>).
+ * Stores the image privately and returns its storage key.
  */
-export async function renderInfographic(note: StructuredNote, theme: Theme = 'emerald'): Promise<string> {
-  await ensureOutputDir()
+export async function renderInfographic(note: StructuredNote, userId: string, theme: Theme = 'emerald'): Promise<string> {
   const html = buildInfographicHtml(note, theme)
 
-  const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  const browser = await launchBrowser()
   try {
     const page = await browser.newPage({
       viewport: { width: INFOGRAPHIC_WIDTH, height: INFOGRAPHIC_HEIGHT },
@@ -437,8 +431,9 @@ export async function renderInfographic(note: StructuredNote, theme: Theme = 'em
       omitBackground: false,
     })
     const filename = `infographic-${theme}-${note.language}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`
-    await fs.writeFile(path.join(OUTPUT_DIR, filename), buf)
-    return filename
+    const key = makeArtifactKey(userId, filename)
+    await storeArtifact(key, buf, 'image/png')
+    return key
   } finally {
     await browser.close()
   }
@@ -449,12 +444,13 @@ export async function renderInfographic(note: StructuredNote, theme: Theme = 'em
  */
 export async function renderInfographics(
   notes: { english?: StructuredNote; urdu?: StructuredNote; hinglish?: StructuredNote },
+  userId: string,
   theme: Theme = 'emerald',
 ): Promise<{ english?: string; urdu?: string; hinglish?: string }> {
   const out: { english?: string; urdu?: string; hinglish?: string } = {}
-  if (notes.english) out.english = await renderInfographic(notes.english, theme)
-  if (notes.urdu) out.urdu = await renderInfographic(notes.urdu, theme)
-  if (notes.hinglish) out.hinglish = await renderInfographic(notes.hinglish, theme)
+  if (notes.english) out.english = await renderInfographic(notes.english, userId, theme)
+  if (notes.urdu) out.urdu = await renderInfographic(notes.urdu, userId, theme)
+  if (notes.hinglish) out.hinglish = await renderInfographic(notes.hinglish, userId, theme)
   return out
 }
 
@@ -547,7 +543,7 @@ function buildNotesSheetHtml(note: StructuredNote): string {
  */
 export async function renderNotesSheetPng(note: StructuredNote): Promise<Buffer> {
   const html = buildNotesSheetHtml(note)
-  const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  const browser = await launchBrowser()
   try {
     const page = await browser.newPage({
       viewport: { width: SHEET_WIDTH, height: 800 },

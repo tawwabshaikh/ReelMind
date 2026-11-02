@@ -1,27 +1,30 @@
-# Vercel deployment readiness
+# Vercel public deployment readiness
 
-**Status: build configuration is prepared, but the full ReelMind service is not ready for a public Vercel deployment.** No Vercel project was created and nothing was deployed.
+## Repository status
 
-## Changes made in this preparation
+The repository now contains the application-side changes for a multi-user ReelMind deployment on Vercel. The app has not been deployed, and external production services and credentials still need to be provisioned before public traffic is enabled.
 
-- Use Vercel's normal Next.js build output; `npm run build` now generates Prisma Client and runs `next build`.
-- Use Node.js 20.9 or newer and `next start` for local production runs.
-- Self-host Inter so a production build does not need to fetch Google Fonts.
-- Include the Urdu font files in the relevant route-handler traces.
-- Ignore local SQLite files and generated exports. The local `.env`, database, and generated files have been removed from Git tracking without deleting their local copies.
-- Stop tracking the local development PID file.
-- Restrict PDF infographic paths to generated PNGs, preventing arbitrary local-file reads through that endpoint.
-- Stop logging raw model response excerpts when note JSON parsing fails.
-- Remove the unused `/api` Hello World endpoint.
+## Implemented
 
-## Required before production
+- Google OAuth sign-in, verified Google identity, JWT sessions, account controls, and production route/API protection.
+- User ownership checks for notes, transcripts, history, edits, deletes, exports, and generation APIs. Existing local SQLite notes without an owner remain local and are not automatically exposed to accounts.
+- Random share tokens and read-only shared-note routes, including authorized access to private note assets.
+- Local SQLite and Vercel PostgreSQL Prisma schemas, initial PostgreSQL migration, and scripts to generate both Prisma clients.
+- Private Vercel Blob support for uploads, generated infographics, and PDFs; private assets are served through access-checked routes.
+- A separate Docker media/AI worker for yt-dlp, ffmpeg, Whisper.cpp, and Ollama. Vercel routes enqueue transcription jobs and poll the worker.
+- Vercel tracing for server-side Chromium and Urdu fonts, self-hosted Inter, safer PDF path handling, and reduced model-output logging on parse failures.
+- The hero illustration now communicates the video → transcript → notes → infographic workflow.
 
-1. **Database:** The Prisma schema currently uses SQLite. Replace it with managed PostgreSQL, add production migrations, configure `DATABASE_URL` in Vercel, and migrate any history that should be retained. [Vercel does not support durable SQLite storage in Functions](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel).
-2. **Generated files:** Infographics and PDFs are written to `public/generated`. Function files are not durable deployment storage. Move these artifacts to object storage and persist their URLs, such as [Vercel Blob](https://vercel.com/docs/vercel-blob).
-3. **Video processing:** Transcription currently depends on local `ffmpeg`, `ffprobe`, `whisper-cli`, a Whisper model file, and `yt-dlp`. Those binaries/model files are not provisioned for Vercel. The 120 MB upload limit also exceeds Vercel Function's [4.5 MB request/response payload limit](https://vercel.com/docs/functions/limitations). Use direct object-storage uploads and a separate worker or hosted processing service.
-4. **AI:** `OLLAMA_BASE_URL` defaults to `127.0.0.1:11434`; in Vercel that points to the function container, not the developer's computer. Configure a reachable model service or move inference to a worker.
-5. **Chromium:** Infographic and PDF rendering launch Playwright Chromium. The repository installs Playwright but does not provision a serverless-compatible Chromium executable. That rendering path needs a compatible browser package or a rendering service.
-6. **Access control:** Notes, transcripts, history, and destructive API routes have no authentication or ownership checks. Protect the app and APIs before making the deployment public.
-7. **Git history:** Earlier repository commits contain versions of the local database and generated exports. Removing them from the current tree does not remove prior copies from Git history. Review repository visibility and decide whether to purge that history before sharing it publicly.
+## Required production setup
 
-Vercel's current limits and storage behavior can change; check the account's plan and connected storage pricing before provisioning services.
+1. **Create and attach production services.** Provision PostgreSQL and a private Vercel Blob store. Set `DATABASE_URL` to the direct Postgres connection for migrations and `DATABASE_URL_POOLED` to the pooled application connection.
+2. **Apply the database migration.** Before serving production traffic, run `npm run db:migrate:deploy` with the direct production `DATABASE_URL`. Local SQLite data is not imported automatically.
+3. **Configure Google OAuth.** Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, and `NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED=true` in Vercel. Add `https://<production-domain>/api/auth/callback/google` as an authorized Google redirect URI.
+4. **Configure private Blob uploads.** Set `BLOB_READ_WRITE_TOKEN` and `NEXT_PUBLIC_VERCEL_UPLOADS=true` in Vercel. Add the same Blob token to the processing worker so it can read and clean up private uploaded videos.
+5. **Deploy the processing worker.** Deploy `worker/docker-compose.yml` on a stable host with Docker, enough CPU/RAM for Whisper and Ollama, a public HTTPS endpoint, and a reverse proxy. Set `PROCESSING_WORKER_URL` and a strong matching `PROCESSING_WORKER_TOKEN` in Vercel and the worker. The included worker keeps jobs in memory and is designed for one instance; active jobs are lost if it restarts.
+6. **Review function limits and cost.** Confirm the Vercel plan permits the configured function duration for note generation and rendering. The worker requires ongoing compute and model storage; this is not a guaranteed free service.
+7. **Review repository history before making GitHub public.** Prior commits contain historical local database/generated files. They are absent from the current deployment tree but remain in Git history. Removing them requires rewriting history and coordinating the remote repository, so it has not been done here.
+
+## Validation and current boundary
+
+`npm run lint`, `npx tsc --noEmit`, and `npm run build` are the repository checks. They validate the code/build but cannot verify external OAuth credentials, production database connectivity, Blob permissions, worker availability, or the final Vercel runtime. No Vercel project was created and no deployment was started.

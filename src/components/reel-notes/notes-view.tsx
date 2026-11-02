@@ -50,13 +50,15 @@ async function exportPdf(
   note: NoteVersion,
   videoName: string,
   infographic: InfographicFile | null | undefined,
+  noteId: string | null | undefined,
 ): Promise<void> {
   const res = await fetch('/api/export-pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       note: note.structured,
-      infographicUrl: infographic?.url ?? null,
+      noteId,
+      shareToken: typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('share') : null,
       videoName,
     }),
   })
@@ -109,7 +111,7 @@ function NoteCard({
   const handleExportPdf = async () => {
     setExporting(true)
     try {
-      await exportPdf(version, videoName || 'untitled', infographic)
+      await exportPdf(version, videoName || 'untitled', infographic, noteId)
       toast.success(isUrdu ? 'PDF تیار ہے' : 'PDF exported')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'PDF export failed')

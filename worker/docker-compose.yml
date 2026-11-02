@@ -1,0 +1,29 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c", "ollama serve & pid=$!; until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull $${OLLAMA_MODEL:-qwen3:4b-instruct}; wait $$pid"]
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct}
+
+  worker:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    environment:
+      PORT: 8080
+      PROCESSING_WORKER_TOKEN: ${PROCESSING_WORKER_TOKEN:?Set a long random worker token}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:?Set the Vercel private Blob read-write token}
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct}
+      MAX_ACTIVE_JOBS: ${MAX_ACTIVE_JOBS:-1}
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  ollama_data:

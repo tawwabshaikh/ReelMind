@@ -7,6 +7,7 @@ import {
 import { db } from '@/lib/db'
 import { AIProviderError } from '@/lib/ai-provider'
 import type { NoteLanguage } from '@/lib/types'
+import { currentUserId } from '@/lib/session'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -27,6 +28,8 @@ interface NoteVersionOutput {
 
 export async function POST(req: NextRequest) {
   try {
+    const userId = await currentUserId()
+    if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     const body = (await req.json()) as GenerateNotesBody
 
     if (!body?.transcript || typeof body.transcript !== 'string' || !body.transcript.trim()) {
@@ -53,10 +56,11 @@ export async function POST(req: NextRequest) {
     // 2) Persist metadata to the database so each run is traceable.
     //    Notes are stored as JSON; infographic filenames are filled in later
     //    by /api/generate-infographic (or left null if not generated).
-    let noteId: string | null = null
+    let noteId: string
     try {
       const created = await db.note.create({
         data: {
+          userId,
           videoName: body.videoName || 'untitled',
           language,
           transcript: body.transcript,
@@ -70,8 +74,8 @@ export async function POST(req: NextRequest) {
       })
       noteId = created.id
     } catch (dbErr) {
-      // DB is best-effort metadata; don't fail the whole request if it hiccups.
       console.error('[/api/generate-notes] db error', dbErr)
+      return NextResponse.json({ error: 'Could not save this note. Please retry.' }, { status: 503 })
     }
 
     return NextResponse.json({

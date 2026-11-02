@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 import { isLikelyUrdu } from './hinglish'
+import { callProcessingWorker, ProcessingWorkerError } from './processing-worker'
 
 export class AIProviderError extends Error {
   constructor(message: string, readonly status = 503) {
@@ -76,6 +77,18 @@ export async function transcribeAudioFile(filePath: string): Promise<string> {
 }
 
 export async function createChatCompletion(messages: Array<{ role: 'system' | 'user'; content: string }>): Promise<string> {
+  if (process.env.VERCEL === '1') {
+    try {
+      const data = await callProcessingWorker<{ message?: { content?: unknown } }>('chat', { messages })
+      const content = data.message?.content
+      if (typeof content !== 'string' || !content.trim()) throw new AIProviderError('The processing worker returned an empty AI response.')
+      return content.trim()
+    } catch (error) {
+      if (error instanceof ProcessingWorkerError) throw new AIProviderError(error.message, error.status)
+      throw error
+    }
+  }
+
   const baseUrl = (process.env.OLLAMA_BASE_URL?.trim() || 'http://127.0.0.1:11434').replace(/\/+$/, '')
   const model = process.env.OLLAMA_MODEL?.trim() || 'qwen3:4b-instruct'
   let response: Response

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { structuredNoteToMarkdown } from '@/lib/notes'
 import type { StructuredNote, NoteVersion, NoteLanguage } from '@/lib/types'
+import { currentUserId, noteOwnerScope } from '@/lib/session'
 
 export const runtime = 'nodejs'
 
@@ -12,6 +13,8 @@ export const runtime = 'nodejs'
  */
 export async function GET(req: NextRequest) {
   try {
+    const userId = await currentUserId()
+    if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     const { searchParams } = new URL(req.url)
     const aId = searchParams.get('a')
     const bId = searchParams.get('b')
@@ -23,8 +26,8 @@ export async function GET(req: NextRequest) {
     }
 
     const [rowA, rowB] = await Promise.all([
-      db.note.findUnique({ where: { id: aId } }),
-      db.note.findUnique({ where: { id: bId } }),
+      db.note.findFirst({ where: { id: aId, ...noteOwnerScope(userId) } }),
+      db.note.findFirst({ where: { id: bId, ...noteOwnerScope(userId) } }),
     ])
     if (!rowA) return NextResponse.json({ error: `Note ${aId} not found.` }, { status: 404 })
     if (!rowB) return NextResponse.json({ error: `Note ${bId} not found.` }, { status: 404 })
@@ -51,9 +54,9 @@ export async function GET(req: NextRequest) {
         english: toVersion(rowA.notesEn, 'english'),
         urdu: toVersion(rowA.notesUr, 'urdu'),
         hinglish: toVersion(rowA.notesHi, 'hinglish'),
-        infographicEn: rowA.infographicEn ? { filename: rowA.infographicEn, url: `/generated/${rowA.infographicEn}` } : null,
-        infographicUr: rowA.infographicUr ? { filename: rowA.infographicUr, url: `/generated/${rowA.infographicUr}` } : null,
-        infographicHi: rowA.infographicHi ? { filename: rowA.infographicHi, url: `/generated/${rowA.infographicHi}` } : null,
+        infographicEn: rowA.infographicEn ? { filename: rowA.infographicEn.split('/').pop()!, url: `/api/notes/${rowA.id}/asset?language=english` } : null,
+        infographicUr: rowA.infographicUr ? { filename: rowA.infographicUr.split('/').pop()!, url: `/api/notes/${rowA.id}/asset?language=urdu` } : null,
+        infographicHi: rowA.infographicHi ? { filename: rowA.infographicHi.split('/').pop()!, url: `/api/notes/${rowA.id}/asset?language=hinglish` } : null,
       },
       b: {
         id: rowB.id,
@@ -65,9 +68,9 @@ export async function GET(req: NextRequest) {
         english: toVersion(rowB.notesEn, 'english'),
         urdu: toVersion(rowB.notesUr, 'urdu'),
         hinglish: toVersion(rowB.notesHi, 'hinglish'),
-        infographicEn: rowB.infographicEn ? { filename: rowB.infographicEn, url: `/generated/${rowB.infographicEn}` } : null,
-        infographicUr: rowB.infographicUr ? { filename: rowB.infographicUr, url: `/generated/${rowB.infographicUr}` } : null,
-        infographicHi: rowB.infographicHi ? { filename: rowB.infographicHi, url: `/generated/${rowB.infographicHi}` } : null,
+        infographicEn: rowB.infographicEn ? { filename: rowB.infographicEn.split('/').pop()!, url: `/api/notes/${rowB.id}/asset?language=english` } : null,
+        infographicUr: rowB.infographicUr ? { filename: rowB.infographicUr.split('/').pop()!, url: `/api/notes/${rowB.id}/asset?language=urdu` } : null,
+        infographicHi: rowB.infographicHi ? { filename: rowB.infographicHi.split('/').pop()!, url: `/api/notes/${rowB.id}/asset?language=hinglish` } : null,
       },
     })
   } catch (err) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { currentUserId, noteOwnerScope } from '@/lib/session'
 
 export const runtime = 'nodejs'
 
@@ -11,8 +12,10 @@ export const runtime = 'nodejs'
  */
 export async function POST() {
   try {
+    const userId = await currentUserId()
+    if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     const rows = await db.note.findMany({
-      where: { wordCount: null },
+      where: { ...noteOwnerScope(userId), wordCount: null },
       select: { id: true, transcript: true, durationSec: true },
     })
 
@@ -21,7 +24,7 @@ export async function POST() {
       const words = row.transcript.split(/\s+/).filter(Boolean).length
       const estDuration = row.durationSec ?? Math.round((words / 150) * 60)
       await db.note.update({
-        where: { id: row.id },
+        where: { id: row.id, ...noteOwnerScope(userId) },
         data: { wordCount: words, durationSec: estDuration || null },
       })
       updated++

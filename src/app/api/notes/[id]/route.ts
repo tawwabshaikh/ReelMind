@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
 import { db } from '@/lib/db'
+import { deleteArtifact } from '@/lib/artifact-storage'
 import { structuredNoteToMarkdown } from '@/lib/notes'
 import type { StructuredNote, NoteVersion, KeyPoint, NoteLanguage } from '@/lib/types'
+import { currentUserId, noteOwnerScope } from '@/lib/session'
 
 export const runtime = 'nodejs'
 
@@ -13,12 +13,14 @@ export const runtime = 'nodejs'
  * back into the workspace without re-uploading the video.
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await currentUserId()
+  if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
   const { id } = await params
   if (!id) {
     return NextResponse.json({ error: 'Missing note id' }, { status: 400 })
   }
   try {
-    const row = await db.note.findUnique({ where: { id } })
+    const row = await db.note.findFirst({ where: { id, ...noteOwnerScope(userId) } })
     if (!row) {
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }
@@ -52,9 +54,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         english,
         urdu,
         hinglish,
-        infographicEn: row.infographicEn ? { filename: row.infographicEn, url: `/generated/${row.infographicEn}` } : null,
-        infographicUr: row.infographicUr ? { filename: row.infographicUr, url: `/generated/${row.infographicUr}` } : null,
-        infographicHi: row.infographicHi ? { filename: row.infographicHi, url: `/generated/${row.infographicHi}` } : null,
+        infographicEn: row.infographicEn ? { filename: row.infographicEn.split('/').pop()!, url: `/api/notes/${row.id}/asset?language=english` } : null,
+        infographicUr: row.infographicUr ? { filename: row.infographicUr.split('/').pop()!, url: `/api/notes/${row.id}/asset?language=urdu` } : null,
+        infographicHi: row.infographicHi ? { filename: row.infographicHi.split('/').pop()!, url: `/api/notes/${row.id}/asset?language=hinglish` } : null,
       },
     })
   } catch (err) {
@@ -93,13 +95,15 @@ interface PatchBody {
  * before regenerating an infographic. Returns the updated full note detail.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await currentUserId()
+  if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
   const { id } = await params
   if (!id) {
     return NextResponse.json({ error: 'Missing note id' }, { status: 400 })
   }
   try {
     const body = (await req.json()) as PatchBody
-    const row = await db.note.findUnique({ where: { id } })
+    const row = await db.note.findFirst({ where: { id, ...noteOwnerScope(userId) } })
     if (!row) {
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }
@@ -188,9 +192,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         english: parse(updated.notesEn, 'english'),
         urdu: parse(updated.notesUr, 'urdu'),
         hinglish: parse(updated.notesHi, 'hinglish'),
-        infographicEn: updated.infographicEn ? { filename: updated.infographicEn, url: `/generated/${updated.infographicEn}` } : null,
-        infographicUr: updated.infographicUr ? { filename: updated.infographicUr, url: `/generated/${updated.infographicUr}` } : null,
-        infographicHi: updated.infographicHi ? { filename: updated.infographicHi, url: `/generated/${updated.infographicHi}` } : null,
+        infographicEn: updated.infographicEn ? { filename: updated.infographicEn.split('/').pop()!, url: `/api/notes/${updated.id}/asset?language=english` } : null,
+        infographicUr: updated.infographicUr ? { filename: updated.infographicUr.split('/').pop()!, url: `/api/notes/${updated.id}/asset?language=urdu` } : null,
+        infographicHi: updated.infographicHi ? { filename: updated.infographicHi.split('/').pop()!, url: `/api/notes/${updated.id}/asset?language=hinglish` } : null,
       },
     })
   } catch (err) {
@@ -205,13 +209,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
  * Returns 200 on success (or 404 if the note didn't exist — idempotent-safe).
  */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await currentUserId()
+  if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
   const { id } = await params
   if (!id) {
     return NextResponse.json({ error: 'Missing note id' }, { status: 400 })
   }
   try {
     const permanent = new URL(req.url).searchParams.get('permanent') === '1'
-    const row = await db.note.findUnique({ where: { id } })
+    const row = await db.note.findFirst({ where: { id, ...noteOwnerScope(userId) } })
     if (!row) {
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }
@@ -224,15 +230,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     // Permanent delete: clean up PNGs, then remove the row.
     const filesToDelete = [row.infographicEn, row.infographicUr, row.infographicHi].filter(Boolean) as string[]
-    await Promise.all(
-      filesToDelete.map(async (fn) => {
-        try {
-          await fs.unlink(path.join(process.cwd(), 'public', 'generated', fn))
-        } catch {
-          // ignore — file may already be gone
-        }
-      }),
-    )
+    const pdfArtifacts = await db.artifact.findMany({ where: { noteId: id, userId }, select: { id: true, storageKey: true } })
+    await Promise.all([...filesToDelete, ...pdfArtifacts.map((artifact) => artifact.storageKey)].map((key) => deleteArtifact(key).catch(() => {})))
+    await db.artifact.deleteMany({ where: { noteId: id, userId } })
 
     await db.note.delete({ where: { id } })
     return NextResponse.json({ ok: true, id, permanent: true, deletedFiles: filesToDelete.length })
@@ -247,12 +247,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
  * deletedAt). Reached via the trash view.
  */
 export async function PUT(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await currentUserId()
+  if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
   const { id } = await params
   if (!id) {
     return NextResponse.json({ error: 'Missing note id' }, { status: 400 })
   }
   try {
-    const row = await db.note.findUnique({ where: { id } })
+    const row = await db.note.findFirst({ where: { id, ...noteOwnerScope(userId) } })
     if (!row) {
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }

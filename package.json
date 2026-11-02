@@ -6,15 +6,18 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "prisma generate && next build --webpack",
+    "dev": "npm run db:generate:all && prisma db push --schema prisma/schema.prisma && next dev -p 3000",
+    "build": "npm run db:generate:all && next build --webpack",
+    "postinstall": "node scripts/generate-prisma.mjs",
     "start": "next start",
     "lint": "eslint .",
     "setup:local-ai": "bash .zscripts/setup-local-ai.sh",
     "setup:video-links": "bash .zscripts/setup-video-links.sh",
     "db:push": "prisma db push",
-    "db:generate": "prisma generate",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:generate:all": "node scripts/generate-prisma.mjs",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy --schema prisma/schema.vercel.prisma",
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {
@@ -52,8 +55,10 @@
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@reactuses/core": "^6.0.5",
+    "@sparticuz/chromium": "^141.0.0",
     "@tanstack/react-query": "^5.82.0",
     "@tanstack/react-table": "^8.21.3",
+    "@vercel/blob": "^2.8.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

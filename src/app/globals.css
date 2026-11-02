@@ -170,6 +170,64 @@
   color: var(--rm-accent);
 }
 
+.hero-highlight {
+  position: relative;
+  color: #16a34a;
+  white-space: nowrap;
+}
+.hero-highlight::after {
+  position: absolute;
+  right: 0;
+  bottom: -0.11em;
+  left: 0;
+  height: 0.12em;
+  border-top: 3px solid #16a34a;
+  border-radius: 50%;
+  content: "";
+  transform: rotate(-1.5deg);
+}
+.hero-sparkle {
+  position: absolute;
+  top: -0.2em;
+  right: -0.72em;
+  color: #07834e;
+  font-size: 0.56em;
+  transform: rotate(18deg);
+}
+.hero-feature {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 17px;
+  border: 1px solid color-mix(in srgb, var(--rm-accent) 12%, var(--border));
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 3px 10px rgb(11 61 46 / 9%);
+}
+.hero-feature-icon {
+  display: inline-flex;
+  width: 21px;
+  height: 21px;
+  align-items: center;
+  justify-content: center;
+  color: #07945b;
+}
+.dark .hero-highlight { color: #34d399; }
+.dark .hero-highlight::after { border-color: #34d399; }
+.dark .hero-sparkle,
+.dark .hero-feature-icon { color: #34d399; }
+.dark .hero-feature { box-shadow: 0 3px 12px rgb(0 0 0 / 18%); }
+
+/* Video-to-knowledge illustration in the open desktop hero space. */
+.hero-art {
+  position: relative;
+  width: 390px;
+  height: 244px;
+  margin-right: 12px;
+}
+.hero-art-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+
 /* Subtle page background — calm, not flashy */
 .bg-reelmind {
   background-color: var(--background);

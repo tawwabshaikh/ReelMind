@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AIProviderError, translateTranscript } from '@/lib/ai-provider'
+import { currentUserId } from '@/lib/session'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   try {
+    if (!await currentUserId()) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     const body = await req.json() as { transcript?: unknown; language?: unknown }
     if (typeof body.transcript !== 'string' || !body.transcript.trim()) {
       return NextResponse.json({ error: 'Missing transcript.' }, { status: 400 })

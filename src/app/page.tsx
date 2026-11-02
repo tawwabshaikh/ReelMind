@@ -16,6 +16,8 @@ import {
   Share2,
   Keyboard,
   Eye,
+  Play,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -32,9 +34,12 @@ import { NoteEditor } from '@/components/reel-notes/note-editor'
 import { CompareDialog } from '@/components/reel-notes/compare-dialog'
 import { ThemeToggle } from '@/components/reel-notes/theme-toggle'
 import { ShareButton } from '@/components/reel-notes/share-button'
+import { AccountMenu } from '@/components/reel-notes/account-menu'
 import { ReelMindLogo } from '@/components/reel-notes/reelmind-logo'
 import { safeJsonFetch } from '@/lib/safe-fetch'
 import { isLikelyHinglish, isLikelyUrdu } from '@/lib/hinglish'
+import { upload } from '@vercel/blob/client'
+import { useSession } from 'next-auth/react'
 import type {
   NoteLanguage,
   Theme,
@@ -56,6 +61,7 @@ const STEPS: { key: Stage | 'infographic'; label: string }[] = [
 ]
 
 export default function Home() {
+  const { data: session } = useSession()
   const [file, setFile] = useState<File | null>(null)
   const [sourceMode, setSourceMode] = useState<VideoSourceMode>('file')
   const [videoUrl, setVideoUrl] = useState('')
@@ -110,7 +116,7 @@ export default function Home() {
     if (!shareId) return
     ;(async () => {
       try {
-        const { data, error } = await safeJsonFetch<NoteDetailResponse>(`/api/notes/${shareId}`)
+        const { data, error } = await safeJsonFetch<NoteDetailResponse>(`/api/shared/${shareId}`)
         if (error) throw new Error(error)
         if (!data) throw new Error('Shared note not found')
         const d = data
@@ -191,15 +197,49 @@ export default function Home() {
 
     // ---- Stage 1: transcribe ----
     setStage('transcribing')
-    let tr: TranscribeResponse
+    let tr!: TranscribeResponse
     try {
       const fd = new FormData()
-      if (sourceMode === 'file' && file) fd.append('video', file)
+      if (sourceMode === 'file' && file) {
+        if (process.env.NEXT_PUBLIC_VERCEL_UPLOADS === 'true') {
+          const userId = session?.user?.id
+          if (!userId) throw new Error('Your account session is still loading. Try again in a moment.')
+          const cleanName = file.name.replace(/[^A-Za-z0-9._-]/g, '_').slice(-100) || 'video.mp4'
+          const blob = await upload(`uploads/${userId}/${crypto.randomUUID()}-${cleanName}`, file, {
+            access: 'private',
+            handleUploadUrl: '/api/uploads',
+            multipart: file.size > 4 * 1024 * 1024,
+          })
+          fd.append('blobPathname', blob.pathname)
+          fd.append('filename', file.name)
+        } else {
+          fd.append('video', file)
+        }
+      }
       else fd.append('url', videoUrl.trim())
-      const { data, error } = await safeJsonFetch<TranscribeResponse>('/api/transcribe', { method: 'POST', body: fd })
+      const { data, error } = await safeJsonFetch<TranscribeResponse | { jobId: string; status: 'processing' }>('/api/transcribe', { method: 'POST', body: fd })
       if (error) throw new Error(error)
       if (!data) throw new Error('Transcription returned no data')
-      tr = data
+      if ('jobId' in data) {
+        let completed = false
+        while (!completed) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          const { data: state, error: statusError } = await safeJsonFetch<{
+            status: 'processing' | 'complete' | 'failed'
+            result?: TranscribeResponse
+            error?: string
+          }>(`/api/transcribe?jobId=${encodeURIComponent(data.jobId)}`)
+          if (statusError) throw new Error(statusError)
+          if (state?.status === 'failed') throw new Error(state.error || 'Transcription failed.')
+          if (state?.status === 'complete' && state.result) {
+            tr = state.result
+            void fetch(`/api/transcribe?jobId=${encodeURIComponent(data.jobId)}`, { method: 'DELETE' })
+            completed = true
+          }
+        }
+      } else {
+        tr = data
+      }
       if ((language === 'hinglish' && !isLikelyHinglish(tr.transcript)) || (language === 'urdu' && !isLikelyUrdu(tr.transcript))) {
         setStage('translating-transcript')
         const translated = await translateTranscriptIfNeeded(tr.transcript, language)
@@ -509,37 +549,41 @@ export default function Home() {
               <Keyboard className="h-4 w-4" />
             </Button>
             <ThemeToggle />
+            <AccountMenu />
           </div>
         </div>
       </header>
 
       {/* ===================== Hero (compact, hidden in shared view) ===================== */}
       {!sharedMode && (
-        <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
-          <div className="max-w-2xl">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Turn every video into <span className="text-accent">knowledge.</span>
+        <section className="mx-auto flex w-full max-w-7xl items-center justify-between gap-6 px-4 pt-6 sm:px-6">
+          <div className="max-w-4xl flex-1">
+            <h2 className="relative inline-block text-3xl font-bold tracking-tight sm:text-[2.65rem] sm:leading-[1.12]">
+              Turn every video into <span className="hero-highlight">knowledge.</span>
+              <span aria-hidden="true" className="hero-sparkle">✦</span>
             </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
+            <p className="mt-3 max-w-4xl text-sm leading-6 text-muted-foreground sm:text-lg sm:leading-7">
               Transcribe videos, generate structured notes, and create shareable visual summaries — in English. Urdu. Hinglish.
             </p>
-            <p className="mt-2 text-xs font-semibold tracking-wide text-accent">
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm font-medium text-foreground">
+              <span className="hero-feature"><span className="hero-feature-icon"><Play className="h-3.5 w-3.5 fill-current" /></span>Transcribe</span>
+              <span className="hero-feature"><span className="hero-feature-icon"><FileText className="h-4 w-4" /></span>Understand</span>
+              <span className="hero-feature"><span className="hero-feature-icon"><Sparkles className="h-4 w-4 fill-current" /></span>Create</span>
+            </div>
+            <p className="mt-3 text-sm font-bold text-accent sm:text-base">
               Learn faster. Remember more.
             </p>
           </div>
-          {/* Compact feature strip */}
-          <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="h-1 w-1 rounded-full bg-accent" /> Transcribe
-            </span>
-            <span className="text-border">·</span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1 w-1 rounded-full bg-accent" /> Understand
-            </span>
-            <span className="text-border">·</span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1 w-1 rounded-full bg-accent" /> Create
-            </span>
+          <div className="hero-art hidden shrink-0 xl:block" aria-hidden="true">
+            <Image
+              src="/hero-video-knowledge.svg"
+              alt="A video transforming into notes, a transcript, and an infographic"
+              width={640}
+              height={400}
+              className="hero-art-image"
+              priority
+              unoptimized
+            />
           </div>
         </section>
       )}

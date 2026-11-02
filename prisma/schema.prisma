@@ -24,7 +24,7 @@ model Note {
   notesEn   String?
   notesUr   String?
   notesHi   String?
-  // Generated infographic PNG filenames (served from /generated/)
+  // Private artifact storage keys for generated infographics.
   infographicEn String?
   infographicUr String?
   infographicHi String?
@@ -32,7 +32,39 @@ model Note {
   // Soft-delete: when set, the note is in the trash (excluded from the default
   // history list) but can be restored or permanently deleted.
   deletedAt DateTime?
+  // Google OAuth subject owning this private generation.
+  userId    String?
+  shareToken String?
 
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([userId, createdAt])
+  @@index([shareToken])
+}
+
+model Artifact {
+  id          String   @id @default(cuid())
+  userId      String
+  noteId      String?
+  storageKey  String   @unique
+  filename    String
+  contentType String
+  shareToken  String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([noteId])
+  @@index([shareToken])
+}
+
+model ProcessingJob {
+  id          String   @id @default(cuid())
+  userId      String
+  workerJobId String?
+  status      String   @default("queued")
+  resultJson  String?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
